@@ -13,6 +13,13 @@ for every token.
     :members:
     :show-inheritance:
 
+:mod:`diagnostic` Module
+--------------------
+
+.. automodule:: pyparser.diagnostic
+    :members:
+    :show-inheritance:
+
 :mod:`lexer` Module
 --------------------
 

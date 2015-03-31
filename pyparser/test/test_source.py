@@ -4,16 +4,16 @@ import pyparser.source as source
 class BufferTestCase(unittest.TestCase):
 
     def setUp(self):
-        self.buffer = source.Buffer("line one\nline two\n\nline four")
+        self.buffer = source.Buffer(u"line one\nline two\n\nline four")
 
     def test_repr(self):
-        self.assertEqual(r'Buffer("<input>")', repr(self.buffer))
+        self.assertEqual(ur'Buffer("<input>")', repr(self.buffer))
 
     def test_source_line(self):
-        self.assertEqual("line one\n", self.buffer.source_line(1))
-        self.assertEqual("line two\n", self.buffer.source_line(2))
-        self.assertEqual("\n", self.buffer.source_line(3))
-        self.assertEqual("line four", self.buffer.source_line(4))
+        self.assertEqual(u"line one\n", self.buffer.source_line(1))
+        self.assertEqual(u"line two\n", self.buffer.source_line(2))
+        self.assertEqual(u"\n", self.buffer.source_line(3))
+        self.assertEqual(u"line four", self.buffer.source_line(4))
         self.assertRaises(IndexError, lambda: self.buffer.source_line(0))
 
     def test_decompose_position(self):
@@ -26,13 +26,13 @@ class BufferTestCase(unittest.TestCase):
 class RangeTestCase(unittest.TestCase):
 
     def setUp(self):
-        self.buffer = source.Buffer("line one\nline two\n\nline four")
+        self.buffer = source.Buffer(u"line one\nline two\n\nline four")
 
     def range(self, lft, rgt):
         return source.Range(self.buffer, lft, rgt)
 
     def test_repr(self):
-        self.assertEqual(r'Range("<input>", 0, 2)',
+        self.assertEqual(ur'Range("<input>", 0, 2)',
                          repr(self.range(0, 2)))
 
     def test_begin(self):
@@ -74,13 +74,13 @@ class RangeTestCase(unittest.TestCase):
                                 source.Range(source.Buffer(""), 0, 0)))
 
     def test_source(self):
-        self.assertEqual("one", self.range(5, 8).source())
+        self.assertEqual(u"one", self.range(5, 8).source())
 
     def test_source_line(self):
-        self.assertEqual("line two\n", self.range(9, 9).source_line())
+        self.assertEqual(u"line two\n", self.range(9, 9).source_line())
 
     def test___str__(self):
-        self.assertEqual("<input>:2:1", str(self.range(9, 9)))
+        self.assertEqual(u"<input>:2:1", str(self.range(9, 9)))
 
     def test___ne__(self):
         self.assertTrue(self.range(0,0) != self.range(0,1))

@@ -5,6 +5,11 @@ The :mod:`lexer` module concerns itself with tokenizing Python source.
 from __future__ import absolute_import, division, print_function, unicode_literals
 from . import source, diagnostic
 import re
+import unicodedata
+import sys
+
+if sys.version_info[0] == 3:
+    unichr = chr
 
 class Lexer:
     """
@@ -52,6 +57,25 @@ class Lexer:
     :class:`frozenset`\s of keywords.
     """
 
+    _string_prefixes_3_1 = frozenset(["", "r", "b", "br"])
+    _string_prefixes_3_3 = frozenset(["", "r", "u", "b", "br", "rb"])
+
+    # holy mother of god why
+    _string_prefixes = {
+        (2, 6): frozenset(["", "r", "u", "ur"]),
+        (2, 7): frozenset(["", "r", "u", "ur", "b", "br"]),
+        (3, 0): frozenset(["", "r", "b"]),
+        (3, 1): _string_prefixes_3_1,
+        (3, 2): _string_prefixes_3_1,
+        (3, 3): _string_prefixes_3_3,
+        (3, 4): _string_prefixes_3_3,
+        (3, 5): _string_prefixes_3_3,
+    }
+    """
+    A map from a tuple (*major*, *minor*) corresponding to Python version to
+    :class:`frozenset`\s of string prefixes.
+    """
+
     def __init__(self, source_buffer, version):
         self.source_buffer = source_buffer
         self.version = version
@@ -86,10 +110,10 @@ class Lexer:
         # otherwise grab all keywords; it is made to work by making it impossible
         # for the keyword case to match a word prefix, and ordering it before
         # the identifier case.
-        self.lex_token = re.compile("""
+        self._lex_token_re = re.compile(r"""
         [ \t\f]* # initial whitespace
         ( # 1
-            (\\\\)? # ?2 line continuation
+            (\\)? # ?2 line continuation
             ([\n]|[\r][\n]|[\r]) # 3 newline
         |   (\#.+) # 4 comment
         |   ( # 5 floating point or complex literal
@@ -109,11 +133,37 @@ class Lexer:
             )
             [Ll]?
         |   ([BbUu]?[Rr]?) # ?13 string literal options
-            (""\"|"|'''|') # 14 string literal start
-        |   ((?:{keywords})\\b|{operators}) # 15 keywords and operators
-        |   ([A-Za-z_][A-Za-z0-9_]*) # 16 identifier
+            (?: # string literal start
+                # 14, 15, 16 long string
+                (""\"|''') ((?: \\?[\n] | \\. | . )*?) (\14)
+                # 17, 18, 19 short string
+            |   ("   |'  ) ((?: \\ [\n] | \\. | . )*?) (\17)
+                # 20 unterminated
+            |   (""\"|'''|"|')
+            )
+        |   ((?:{keywords})\b|{operators}) # 21 keywords and operators
+        |   ([A-Za-z_][A-Za-z0-9_]*) # 22 identifier
         )
         """.format(keywords=re_keywords, operators=re_operators), re.VERBOSE)
+
+    # These are identical for all lexer instances.
+    _lex_escape_re = re.compile(r"""
+    \\(?:
+        ([\n\\'"abfnrtv]) # 1 single-char
+    |   ([0-7]{3})        # 2 oct
+    |   x([0-9A-Fa-f]{2}) # 3 hex
+    )
+    """, re.VERBOSE)
+
+    _lex_escape_unicode_re = re.compile(_lex_escape_re.pattern + r"""
+    | \\(?:
+        u([0-9A-Fa-f]{4}) # 4 unicode-16
+    |   U([0-9A-Fa-f]{8}) # 5 unicode-32
+    |   N\{(.+?)\}        # 6 unicode-name
+    )
+    """, re.VERBOSE)
+
+    _lex_check_byte_re = re.compile("[^\x00-\x7f]")
 
     def next(self):
         """
@@ -124,9 +174,10 @@ class Lexer:
         - *range* is a :class:`pyparser.source.Range` that includes
           the token but not surrounding whitespace,
         - *token* is a string containing one of Python keywords or operators,
-          ``newline``, ``'``, ``'''``, ``"``, ``""\"``,
-          ``float``, ``int``, ``complex``, ``ident``, ``indent`` or ``dedent``
-        - *data* is the flags as lowercase string if *token* is a quote,
+          ``newline``, ``float``, ``int``, ``complex``, ``strbegin``,
+          ``strdata``, ``strend``, ``ident``, ``indent`` or ``dedent``,
+        - *data* is the flags as lowercase string if *token* is ``strbegin``,
+          the string contents if *token* is ``strdata``,
           the numeric value if *token* is ``float``, ``int`` or ``complex``,
           the identifier if *token* is ``ident`` and ``None`` in any other case.
         """
@@ -141,7 +192,7 @@ class Lexer:
 
         # We need separate next and _lex because lexing can sometimes
         # generate several tokens, e.g. INDENT
-        match = self.lex_token.match(
+        match = self._lex_token_re.match(
             self.source_buffer.source, self.offset)
         if match is None:
             diag = diagnostic.Diagnostic(
@@ -203,18 +254,133 @@ class Lexer:
                 raise diagnostic.DiagnosticException(error)
             return tok_range, "int", int(literal, 8)
 
-        elif match.group(14) is not None: # string literal start
-            options = match.group(13).lower()
-            return tok_range, match.group(14), options
+        elif match.group(14) is not None: # long string literal
+            return self._string_literal(
+                options=match.group(13), begin_span=(match.start(13), match.end(14)),
+                data=match.group(15), data_span=match.span(15),
+                end_span=match.span(16))
 
-        elif match.group(15) is not None: # keywords and operators
-            self._match_pair_delim(tok_range, match.group(15))
-            return tok_range, match.group(15), None
+        elif match.group(17) is not None: # short string literal
+            return self._string_literal(
+                options=match.group(13), begin_span=(match.start(13), match.end(17)),
+                data=match.group(18), data_span=match.span(18),
+                end_span=match.span(19))
 
-        elif match.group(16) is not None: # identifier
-            return tok_range, "ident", match.group(16)
+        elif match.group(20) is not None: # unterminated string
+            error = diagnostic.Diagnostic(
+                "fatal", "unterminated string", {},
+                tok_range)
+            raise diagnostic.DiagnosticException(error)
+
+        elif match.group(21) is not None: # keywords and operators
+            kwop = match.group(21)
+            self._match_pair_delim(tok_range, kwop)
+            return tok_range, kwop, None
+
+        elif match.group(22) is not None: # identifier
+            return tok_range, "ident", match.group(22)
 
         assert False
+
+    def _string_literal(self, options, begin_span, data, data_span, end_span):
+        options = options.lower()
+        begin_range = source.Range(self.source_buffer, *begin_span)
+        data_range = source.Range(self.source_buffer, *data_span)
+
+        if options not in self._string_prefixes[self.version]:
+            error = diagnostic.Diagnostic(
+                "error", "string prefix '{prefix}' is not available in Python {major}.{minor}",
+                {'prefix': options, 'major': self.version[0], 'minor': self.version[1]},
+                begin_range)
+            raise diagnostic.DiagnosticException(error)
+
+        self.queue.append((data_range,
+                          'strdata', self._replace_escape(data_range, options, data)))
+        self.queue.append((source.Range(self.source_buffer, *end_span),
+                          'strend', None))
+        return begin_range, 'strbegin', options
+
+    def _replace_escape(self, range, mode, value):
+        is_raw     = ("r" in mode)
+        is_byte    = ("b" in mode)
+        is_unicode = ("u" in mode)
+
+        if is_raw:
+            return value
+
+        if is_byte and self._lex_check_byte_re.match(value):
+            error = diagnostic.Diagnostic(
+                "error", "non-7-bit character in a byte literal", {},
+                tok_range)
+            raise diagnostic.DiagnosticException(error)
+
+        if is_unicode or self.version >= (3, 0):
+            re = self._lex_escape_unicode_re
+        else:
+            re = self._lex_escape_re
+
+        chunks = []
+        offset = 0
+        while offset < len(value):
+            match = re.search(value, offset)
+            if match is None:
+                # Append the remaining of the string
+                chunks.append(value[offset:])
+                break
+
+            # Append the part of string before match
+            chunks.append(value[offset:match.start()])
+            offset = match.end()
+
+            # Process the escape
+            if match.group(1) is not None: # single-char
+                chr = match.group(1)
+                if chr == "\n":
+                    pass
+                elif chr == "\\" or chr == "'" or chr == '"':
+                    chunks.append(chr)
+                elif chr == "a":
+                    chunks.append("\a")
+                elif chr == "b":
+                    chunks.append("\b")
+                elif chr == "f":
+                    chunks.append("\f")
+                elif chr == "n":
+                    chunks.append("\n")
+                elif chr == "r":
+                    chunks.append("\r")
+                elif chr == "t":
+                    chunks.append("\t")
+                elif chr == "v":
+                    chunks.append("\v")
+            elif match.group(2) is not None: # oct
+                chunks.append(unichr(int(match.group(2), 8)))
+            elif match.group(3) is not None: # hex
+                chunks.append(unichr(int(match.group(3), 16)))
+            elif match.group(4) is not None: # unicode-16
+                chunks.append(unichr(int(match.group(4), 16)))
+            elif match.group(5) is not None: # unicode-32
+                try:
+                    chunks.append(unichr(int(match.group(5), 16)))
+                except ValueError:
+                    error = diagnostic.Diagnostic(
+                        "error", "unicode character out of range", {},
+                        source.Range(self.source_buffer,
+                                     range.begin_pos + match.start(0),
+                                     range.begin_pos + match.end(0)))
+                    raise diagnostic.DiagnosticException(error)
+            elif match.group(6) is not None: # unicode-name
+                try:
+                    chunks.append(unicodedata.lookup(match.group(6)))
+                except KeyError:
+                    error = diagnostic.Diagnostic(
+                        "error", "unknown unicode character name", {},
+                        source.Range(self.source_buffer,
+                                     range.begin_pos + match.start(0),
+                                     range.begin_pos + match.end(0)))
+                    raise diagnostic.DiagnosticException(error)
+
+        return ''.join(chunks)
 
     def _check_long_literal(self, range, literal):
         if literal[-1] in "lL" and self.version >= (3, 0):

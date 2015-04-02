@@ -1,3 +1,5 @@
+# coding:utf-8
+
 from __future__ import absolute_import, division, print_function, unicode_literals
 from .. import source, lexer, diagnostic
 import unittest
@@ -120,19 +122,78 @@ class LexerTestCase(unittest.TestCase):
                          "int", 123)
 
     def test_string_literal(self):
-        self.assertLexes("\"",
-                         "\"", "")
-        self.assertLexes("u\"",
-                         "\"", "u")
-        self.assertLexes("ur\"",
-                         "\"", "ur")
-        self.assertLexes("UR\"",
-                         "\"", "ur")
+        self.assertLexes("''",
+                         "strbegin", "",
+                         "strdata",  "",
+                         "strend",   None)
+        self.assertLexes("''''''",
+                         "strbegin", "",
+                         "strdata",  "",
+                         "strend",   None)
+        self.assertLexes('""',
+                         "strbegin", "",
+                         "strdata",  "",
+                         "strend",   None)
+        self.assertLexes('""""""',
+                         "strbegin", "",
+                         "strdata",  "",
+                         "strend",   None)
 
-        self.assertLexes("'''",
-                         "'''", "")
-        self.assertLexes("\"\"\"",
-                         "\"\"\"", "")
+        self.assertLexes("'x'",
+                         "strbegin", "",
+                         "strdata",  "x",
+                         "strend",   None)
+
+        self.assertLexes("'''\n'''",
+                         "strbegin", "",
+                         "strdata",  "\n",
+                         "strend",   None)
+
+        self.assertLexes("'''\n'''",
+                         "strbegin", "",
+                         "strdata",  "\n",
+                         "strend",   None)
+
+        self.assertDiagnoses(
+                         "'",
+                         [("fatal", "unterminated string", (0, 1))])
+
+    def test_string_literal_kinds(self):
+        self.assertDiagnosesVersions(
+                         "u''", [(3,0)],
+                         [("error", "string prefix 'u' is not available in Python 3.0", (0, 2))])
+
+    def assertLexesEscape(self, mode, src, val):
+        self.assertLexesVersions(
+                         mode + "'" + src + "'", [(3,4)],
+                         "strbegin", mode,
+                         "strdata",  val,
+                         "strend",   None)
+
+    def test_escape_clike(self):
+        for chr, val in [ ("\\\n", ""),
+                (r"\\", "\\"), (r"\'", "'"),  (r"\"", "\""),
+                (r"\a", "\a"), (r"\b", "\b"), (r"\f", "\f"), (r"\n", "\n"),
+                (r"\r", "\r"), (r"\t", "\t"), (r"\v", "\v"),
+                (r"\x53", "S"), (r"\123", "S")]:
+            for mode in [ "", "u", "b" ]:
+                self.assertLexesEscape(mode, chr, val)
+            for mode in [ "r", "br" ]:
+                self.assertLexesEscape(mode, chr, chr)
+
+        self.assertLexesEscape("r", "\\\"", "\\\"")
+
+    def test_escape_unicode(self):
+        self.assertLexesEscape("u", "\\u044b", "ы")
+        self.assertLexesEscape("u", "\\U0000044b", "ы")
+        self.assertLexesEscape("u", "\\N{LATIN CAPITAL LETTER A}", "A")
+
+        self.assertDiagnosesVersions(
+                         "u'\\U11111111'", [(3,4)],
+                         [("error", "unicode character out of range", (2, 12))])
+        self.assertDiagnosesVersions(
+                         "u'\\N{foobar}'", [(3,4)],
+                         [("error", "unknown unicode character name", (2, 12))])
 
     def test_identifier(self):
         self.assertLexes("a",

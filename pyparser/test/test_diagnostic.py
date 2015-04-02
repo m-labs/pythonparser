@@ -1,6 +1,6 @@
+from __future__ import absolute_import, division, print_function, unicode_literals
+from .. import source, diagnostic
 import unittest
-import pyparser.source as source
-import pyparser.diagnostic as diagnostic
 
 class DiagnosticTestCase(unittest.TestCase):
 

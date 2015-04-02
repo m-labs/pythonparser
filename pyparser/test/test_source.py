@@ -1,5 +1,6 @@
+from __future__ import absolute_import, division, print_function, unicode_literals
+from .. import source
 import unittest
-import pyparser.source as source
 
 class BufferTestCase(unittest.TestCase):
 

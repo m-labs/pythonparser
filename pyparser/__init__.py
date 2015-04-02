@@ -1,3 +1,1 @@
-import source
-import diagnostic
-import lexer
+from . import source, diagnostic, lexer

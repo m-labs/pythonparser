@@ -2,8 +2,8 @@
 The :mod:`lexer` module concerns itself with tokenizing Python source.
 """
 
-import source
-import diagnostic
+from __future__ import absolute_import, division, print_function, unicode_literals
+from . import source, diagnostic
 import re
 
 class Lexer:
@@ -84,10 +84,10 @@ class Lexer:
         # otherwise grab all keywords; it is made to work by making it impossible
         # for the keyword case to match a word prefix, and ordering it before
         # the identifier case.
-        self.lex_token = re.compile(ur"""
+        self.lex_token = re.compile(u"""
         [ \t\f]* # initial whitespace
         ( # 1
-            (\\)? # ?2 line continuation
+            (\\\\)? # ?2 line continuation
             ([\n]|[\r][\n]|[\r]) # 3 newline
         |   (\#.+) # 4 comment
         |   ( # 5 floating point or complex literal
@@ -107,7 +107,7 @@ class Lexer:
             [Ll]?
         |   ([BbUu]?[Rr]?) # ?12 string literal options
             (""\"|"|'''|') # 13 string literal start
-        |   ((?:{keywords})\b|{operators}) # 14 keywords and operators
+        |   ((?:{keywords})\\b|{operators}) # 14 keywords and operators
         |   ([A-Za-z_][A-Za-z0-9_]*) # 15 identifier
         )
         """.format(keywords=re_keywords, operators=re_operators), re.VERBOSE)
@@ -145,7 +145,7 @@ class Lexer:
                 "fatal", u"unexpected {character}",
                 {"character": repr(self.source_buffer.source[self.offset]).lstrip(u"u")},
                 source.Range(self.source_buffer, self.offset, self.offset + 1))
-            raise diagnostic.Exception(diag)
+            raise diagnostic.DiagnosticException(diag)
         self.offset = match.end(0)
 
         tok_range = source.Range(self.source_buffer, *match.span(1))
@@ -212,7 +212,7 @@ class Lexer:
         if len(self.curly_braces) > 0:
             ranges.append(('{', self.curly_braces[-1]))
 
-        ranges.sort(key=lambda (_, range): range.begin_pos)
+        ranges.sort(key=lambda k: k[1].begin_pos)
         compl_kind, compl_range = ranges[-1]
         if compl_kind != expected:
             note = diagnostic.Diagnostic(
@@ -223,7 +223,7 @@ class Lexer:
                 "fatal", u"mismatched '{delimiter}'",
                 {"delimiter": range.source()},
                 range, notes=[note])
-            raise diagnostic.Exception(error)
+            raise diagnostic.DiagnosticException(error)
 
     def __iter__(self):
         return self

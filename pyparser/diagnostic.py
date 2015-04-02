@@ -3,7 +3,7 @@ The :mod:`Diagnostic` module concerns itself with processing
 and presentation of diagnostic messages.
 """
 
-import exceptions
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 class Diagnostic:
     """
@@ -69,23 +69,23 @@ class Diagnostic:
                  ~ ^ ~~~
         """
         source_line = self.location.source_line().rstrip(u"\n")
-        highlight_line = bytearray(' ') * len(source_line)
+        highlight_line = bytearray(u" ", 'utf-8') * len(source_line)
 
         for hilight in self.highlights:
             lft, rgt = hilight.column_range()
-            highlight_line[lft:rgt] = bytearray('~') * hilight.size()
+            highlight_line[lft:rgt] = bytearray(u"~", 'utf-8') * hilight.size()
 
         lft, rgt = self.location.column_range()
-        highlight_line[lft:rgt] = bytearray('^') * self.location.size()
+        highlight_line[lft:rgt] = bytearray(u"^", 'utf-8') * self.location.size()
 
         return [
-            u"%s: %s: %s" % (unicode(self.location), self.level, self.message()),
+            u"%s: %s: %s" % (str(self.location), self.level, self.message()),
             source_line,
-            unicode(highlight_line)
+            highlight_line.decode('utf-8')
         ]
 
 
-class Exception(exceptions.Exception):
+class DiagnosticException(Exception):
     """
     :class:`Exception` is an exception which carries a :class:`Diagnostic`.
 

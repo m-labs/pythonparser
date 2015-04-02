@@ -4,7 +4,7 @@ The :mod:`lexer` module concerns itself with tokenizing Python source.
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 from . import source, diagnostic
-import re
+import regex as re
 import unicodedata
 import sys
 

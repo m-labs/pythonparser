@@ -12,7 +12,7 @@ class PushDocCommand(Command):
         os.system('rsync -avz doc/_build/html/ shell.serverraum.org:~/web/m-labs.hk/pyparser')
 
 setup(
-    name="artiq",
+    name="pyparser",
     version="0.0+dev",
     author="whitequark",
     author_email="whitequark@whitequark.org",
@@ -20,7 +20,7 @@ setup(
     description="A Python parser intended for use in tooling",
     long_description=open("README.rst").read(),
     license="BSD",
-    install_requires=[],
+    install_requires=['regex'],
     extras_require={},
     dependency_links=[],
     packages=find_packages(exclude=['tests*']),

@@ -15,9 +15,24 @@ class LexerTestCase(unittest.TestCase):
             self.assertEqual(expected_data, data)
         self.assertEqual((), tokens)
 
-    def assertLexes(self, input, *tokens):
-        for version in [(2,6), (3,0), (3,1)]:
+    def assertDiagnosesVersion(self, input, version, (reason, args, loc), *tokens):
+        try:
             self.assertLexesVersion(input, version, *tokens)
+        except pyparser.diagnostic.Exception as e:
+            self.assertEqual(reason, e.diagnostic.reason)
+            self.assertEqual(args, e.diagnostic.arguments)
+            self.assertEqual(pyparser.source.Range(self.buffer, *loc),
+                             e.diagnostic.location)
+
+    VERSIONS = [(2,6), (3,0), (3,1)]
+
+    def assertLexes(self, input, *tokens):
+        for version in self.VERSIONS:
+            self.assertLexesVersion(input, version, *tokens)
+
+    def assertDiagnoses(self, input, diag, *tokens):
+        for version in self.VERSIONS:
+            self.assertDiagnosesVersion(input, version, diag, *tokens)
 
     def test_empty(self):
         self.assertLexes("")
@@ -113,6 +128,23 @@ class LexerTestCase(unittest.TestCase):
                                 ">", None)
         self.assertLexesVersion("<>", (3,1),
                                 "<>", None)
+
+    def test_implicit_joining(self):
+        self.assertLexes("[1,\n2]",
+                         '[', None,
+                         'int', 1,
+                         ',', None,
+                         'int', 2,
+                         ']', None)
+
+    def test_diag_unrecognized(self):
+        self.assertDiagnoses("$",
+                             (u"unexpected {character}", {"character": "'$'"}, (0, 1)))
+
+    def test_diag_delim_mismatch(self):
+        self.assertDiagnoses("[)",
+                             (u"mismatched '{delimiter}'", {"delimiter": u")"}, (1, 2)),
+                             '[', None)
 
 """
     def test_(self):

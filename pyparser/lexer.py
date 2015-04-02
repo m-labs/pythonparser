@@ -57,6 +57,9 @@ class Lexer:
         self.offset = 0
         self.comments = []
         self.queue = []
+        self.parentheses = []
+        self.curly_braces = []
+        self.square_braces = []
 
         try:
             reserved = self._reserved[version]
@@ -139,13 +142,16 @@ class Lexer:
         if match is None:
             diag = diagnostic.Diagnostic(
                 "fatal", u"unexpected {character}",
-                {"character": repr(self.source_buffer.source[self.offset])},
+                {"character": repr(self.source_buffer.source[self.offset]).lstrip(u"u")},
                 source.Range(self.source_buffer, self.offset, self.offset + 1))
             raise diagnostic.Exception(diag)
         self.offset = match.end(0)
 
         tok_range = source.Range(self.source_buffer, *match.span(1))
         if match.group(2) is not None: # newline
+            if len(self.parentheses) + len(self.square_braces) + len(self.curly_braces) > 0:
+                # Implicitly joined lines.
+                return self._lex()
             return tok_range, "newline", None
         elif match.group(3) is not None: # comment
             self.comments.append((tok_range, match.group(3)))
@@ -169,11 +175,51 @@ class Lexer:
             options = match.group(11).lower()
             return tok_range, match.group(12), options
         elif match.group(13) is not None: # keywords and operators
+            self._match_pair_delim(tok_range, match.group(13))
             return tok_range, match.group(13), None
         elif match.group(14) is not None: # identifier
             return tok_range, "ident", match.group(14)
         else:
             assert False
+
+    def _match_pair_delim(self, range, kwop):
+        if kwop == '(':
+            self.parentheses.append(range)
+        elif kwop == '[':
+            self.square_braces.append(range)
+        elif kwop == '{':
+            self.curly_braces.append(range)
+        elif kwop == ')':
+            self._check_innermost_pair_delim(range, '(')
+            self.parentheses.pop()
+        elif kwop == ']':
+            self._check_innermost_pair_delim(range, '[')
+            self.square_braces.pop()
+        elif kwop == '}':
+            self._check_innermost_pair_delim(range, '{')
+            self.curly_braces.pop()
+
+    def _check_innermost_pair_delim(self, range, expected):
+        ranges = []
+        if len(self.parentheses) > 0:
+            ranges.append(('(', self.parentheses[-1]))
+        if len(self.square_braces) > 0:
+            ranges.append(('[', self.square_braces[-1]))
+        if len(self.curly_braces) > 0:
+            ranges.append(('{', self.curly_braces[-1]))
+
+        ranges.sort(key=lambda (_, range): range.begin_pos)
+        compl_kind, compl_range = ranges[-1]
+        if compl_kind != expected:
+            note = diagnostic.Diagnostic(
+                "note", u"'{delimiter}' opened here",
+                {"delimiter": compl_kind},
+                compl_range)
+            error = diagnostic.Diagnostic(
+                "fatal", u"mismatched '{delimiter}'",
+                {"delimiter": range.source()},
+                range, notes=[note])
+            raise diagnostic.Exception(error)
 
     def __iter__(self):
         return self

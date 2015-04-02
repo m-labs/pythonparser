@@ -95,4 +95,5 @@ class Exception(exceptions.Exception):
         self.diagnostic = diagnostic
 
     def __str__(self):
-        return "\n".join(self.diagnostic.render())
+        return "\n".join(self.diagnostic.render() +
+                         reduce(list.__add__, map(Diagnostic.render, self.diagnostic.notes)))

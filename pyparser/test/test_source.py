@@ -23,6 +23,11 @@ class BufferTestCase(unittest.TestCase):
         self.assertEqual((2,0), self.buffer.decompose_position(9))
         self.assertRaises(IndexError, lambda: self.buffer.decompose_position(90))
 
+    def test_bug_one_past_end(self):
+        self.assertEqual((2, 0),
+                         source.Buffer("\n").decompose_position(1))
+
+
 class RangeTestCase(unittest.TestCase):
 
     def setUp(self):

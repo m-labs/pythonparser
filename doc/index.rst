@@ -14,7 +14,7 @@ for every token.
     :show-inheritance:
 
 :mod:`diagnostic` Module
---------------------
+------------------------
 
 .. automodule:: pyparser.diagnostic
     :members:

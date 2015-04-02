@@ -3,6 +3,8 @@ The :mod:`Diagnostic` module concerns itself with processing
 and presentation of diagnostic messages.
 """
 
+import exceptions
+
 class Diagnostic:
     """
     A diagnostic message highlighting one or more locations
@@ -59,6 +61,12 @@ class Diagnostic:
         the formatted message, the source line corresponding
         to ``location`` and a line emphasizing the problematic
         locations in the source line using ASCII art, as a list of lines.
+
+        For example: ::
+
+            <input>:1:8: error: cannot add integer and string
+            x + (1 + "a")
+                 ~ ^ ~~~
         """
         source_line = self.location.source_line().rstrip(u"\n")
         highlight_line = bytearray(' ') * len(source_line)
@@ -71,7 +79,20 @@ class Diagnostic:
         highlight_line[lft:rgt] = bytearray('^') * self.location.size()
 
         return [
-            "%s: %s: %s" % (str(self.location), self.level, self.message()),
+            u"%s: %s: %s" % (unicode(self.location), self.level, self.message()),
             source_line,
             unicode(highlight_line)
         ]
+
+
+class Exception(exceptions.Exception):
+    """
+    :class:`Exception` is an exception which carries a :class:`Diagnostic`.
+
+    :ivar diagnostic: (:class:`Diagnostic`) the diagnostic
+    """
+    def __init__(self, diagnostic):
+        self.diagnostic = diagnostic
+
+    def __str__(self):
+        return "\n".join(self.diagnostic.render())

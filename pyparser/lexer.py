@@ -87,27 +87,28 @@ class Lexer:
         self.lex_token = re.compile(ur"""
         [ \t\f]* # initial whitespace
         ( # 1
-            ([\n]) # 2 newline
-        |   (\#.+) # 3 comment
-        |   ( # 4 floating point or complex literal
+            (\\)? # ?2 line continuation
+            ([\n]|[\r][\n]|[\r]) # 3 newline
+        |   (\#.+) # 4 comment
+        |   ( # 5 floating point or complex literal
                 (?: [0-9]* \.  [0-9]+
                 |   [0-9]+ \.?
                 ) [eE] [+-]? [0-9]+
             |   [0-9]* \. [0-9]+
             |   [0-9]+ \.
-            ) ([jJ])? # ?5 complex suffix
-        |   ([0-9]+) [jJ] # 6 complex literal
+            ) ([jJ])? # ?6 complex suffix
+        |   ([0-9]+) [jJ] # 7 complex literal
         |   (?: # integer literal
-                ( [1-9]  [0-9]* )       # 7 dec
-            |   0[oO]? ( [0-7]+ )       # 8 oct
-            |   0[xX]  ( [0-9A-Fa-f]+ ) # 9 hex
-            |   0[bB]  ( [01]+ )        # 10 bin
+                ( [1-9]  [0-9]* )       # 8 dec
+            |   0[oO]? ( [0-7]+ )       # 9 oct
+            |   0[xX]  ( [0-9A-Fa-f]+ ) # 10 hex
+            |   0[bB]  ( [01]+ )        # 11 bin
             )
             [Ll]?
-        |   ([BbUu]?[Rr]?) # ?11 string literal options
-            (""\"|"|'''|') # 12 string literal start
-        |   ((?:{keywords})\b|{operators}) # 13 keywords and operators
-        |   ([A-Za-z_][A-Za-z0-9_]*) # 14 identifier
+        |   ([BbUu]?[Rr]?) # ?12 string literal options
+            (""\"|"|'''|') # 13 string literal start
+        |   ((?:{keywords})\b|{operators}) # 14 keywords and operators
+        |   ([A-Za-z_][A-Za-z0-9_]*) # 15 identifier
         )
         """.format(keywords=re_keywords, operators=re_operators), re.VERBOSE)
 
@@ -148,37 +149,40 @@ class Lexer:
         self.offset = match.end(0)
 
         tok_range = source.Range(self.source_buffer, *match.span(1))
-        if match.group(2) is not None: # newline
+        if match.group(3) is not None: # newline
             if len(self.parentheses) + len(self.square_braces) + len(self.curly_braces) > 0:
-                # Implicitly joined lines.
+                # 2.1.6 Implicit line joining
+                return self._lex()
+            if match.group(2) is not None:
+                # 2.1.5. Explicit line joining
                 return self._lex()
             return tok_range, "newline", None
-        elif match.group(3) is not None: # comment
-            self.comments.append((tok_range, match.group(3)))
+        elif match.group(4) is not None: # comment
+            self.comments.append((tok_range, match.group(4)))
             return self._lex()
-        elif match.group(4) is not None: # floating point or complex literal
-            if match.group(5) is None:
-                return tok_range, "float", float(match.group(4))
+        elif match.group(5) is not None: # floating point or complex literal
+            if match.group(6) is None:
+                return tok_range, "float", float(match.group(5))
             else:
-                return tok_range, "complex", float(match.group(4)) * 1j
-        elif match.group(6) is not None: # complex literal
-            return tok_range, "complex", int(match.group(6)) * 1j
-        elif match.group(7) is not None: # integer literal, dec
-            return tok_range, "int", int(match.group(7))
-        elif match.group(8) is not None: # integer literal, oct
-            return tok_range, "int", int(match.group(8), 8)
-        elif match.group(9) is not None: # integer literal, hex
-            return tok_range, "int", int(match.group(9), 16)
-        elif match.group(10) is not None: # integer literal, bin
-            return tok_range, "int", int(match.group(10), 2)
-        elif match.group(12) is not None: # string literal start
-            options = match.group(11).lower()
-            return tok_range, match.group(12), options
-        elif match.group(13) is not None: # keywords and operators
-            self._match_pair_delim(tok_range, match.group(13))
-            return tok_range, match.group(13), None
-        elif match.group(14) is not None: # identifier
-            return tok_range, "ident", match.group(14)
+                return tok_range, "complex", float(match.group(5)) * 1j
+        elif match.group(7) is not None: # complex literal
+            return tok_range, "complex", int(match.group(7)) * 1j
+        elif match.group(8) is not None: # integer literal, dec
+            return tok_range, "int", int(match.group(8))
+        elif match.group(9) is not None: # integer literal, oct
+            return tok_range, "int", int(match.group(9), 8)
+        elif match.group(10) is not None: # integer literal, hex
+            return tok_range, "int", int(match.group(10), 16)
+        elif match.group(11) is not None: # integer literal, bin
+            return tok_range, "int", int(match.group(11), 2)
+        elif match.group(13) is not None: # string literal start
+            options = match.group(12).lower()
+            return tok_range, match.group(13), options
+        elif match.group(14) is not None: # keywords and operators
+            self._match_pair_delim(tok_range, match.group(14))
+            return tok_range, match.group(14), None
+        elif match.group(15) is not None: # identifier
+            return tok_range, "ident", match.group(15)
         else:
             assert False
 

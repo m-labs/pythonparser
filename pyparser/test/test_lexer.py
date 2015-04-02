@@ -40,6 +40,11 @@ class LexerTestCase(unittest.TestCase):
     def test_newline(self):
         self.assertLexes("\n",
                          'newline', None)
+        self.assertLexes("\r\n",
+                         'newline', None)
+        self.assertLexes("\r",
+                         'newline', None)
+        self.assertLexes("\\\n")
 
     def test_comment(self):
         self.assertLexes("# foo")

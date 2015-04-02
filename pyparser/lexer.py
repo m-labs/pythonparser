@@ -64,7 +64,7 @@ class Lexer:
         try:
             reserved = self._reserved[version]
         except KeyError:
-            raise NotImplementedError, "pyparser.lexer.Lexer cannot lex Python %s", str(version)
+            raise NotImplementedError("pyparser.lexer.Lexer cannot lex Python %s" % str(version))
 
         # Sort for the regexp to obey longest-match rule.
         re_reserved  = sorted(reserved, reverse=True, key=len)

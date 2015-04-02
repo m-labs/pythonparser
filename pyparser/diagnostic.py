@@ -38,11 +38,11 @@ class Diagnostic:
     def __init__(self, level, reason, arguments, location,
                  highlights=[], notes=[]):
         if level not in self.LEVELS:
-            raise ValueError, "level must be one of Diagnostic.LEVELS"
+            raise ValueError("level must be one of Diagnostic.LEVELS")
 
         if len(set(map(lambda x: x.source_buffer,
                        [location] + highlights))) > 1:
-            raise ValueError, "location and highlights must refer to the same source buffer"
+            raise ValueError("location and highlights must refer to the same source buffer")
 
         self.level, self.reason, self.arguments = \
             level, reason, arguments

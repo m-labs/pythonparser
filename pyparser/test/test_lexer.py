@@ -290,6 +290,11 @@ class LexerTestCase(unittest.TestCase):
                          "ident",   "x",
                          "newline", None)
 
+    def test_eof(self):
+        self.assertLexes("\t",
+                         "indent",  None,
+                         "eof",     None)
+
     def test_diag_unrecognized(self):
         self.assertDiagnoses(
                          "$",

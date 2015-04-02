@@ -146,6 +146,7 @@ class Lexer:
         |   ((?:{keywords})\b|{operators}) # 21 keywords and operators
         |   ([A-Za-z_][A-Za-z0-9_]*\b) # 22 identifier
         |   (\p{{XID_Start}}\p{{XID_Continue}}*) # 23 Unicode identifier
+        |   ($) # 24 end-of-file
         )
         """.format(keywords=re_keywords, operators=re_operators), re.VERBOSE|re.UNICODE)
 
@@ -323,13 +324,16 @@ class Lexer:
         elif match.group(22) is not None: # identifier
             self.queue.append((tok_range, "ident", match.group(22)))
 
-        elif match.group(23) is not None: # identifier
+        elif match.group(23) is not None: # Unicode identifier
             if self.version < (3, 0):
                 error = diagnostic.Diagnostic(
                     "error", "in Python 2, Unicode identifiers are not allowed", {},
                     tok_range)
                 raise diagnostic.DiagnosticException(error)
             self.queue.append((tok_range, "ident", match.group(23)))
+
+        elif match.group(24) is not None: # end-of-file
+            self.queue.append((tok_range, "eof", None))
 
         else:
             assert False

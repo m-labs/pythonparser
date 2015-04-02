@@ -68,18 +68,18 @@ class Diagnostic:
             x + (1 + "a")
                  ~ ^ ~~~
         """
-        source_line = self.location.source_line().rstrip(u"\n")
-        highlight_line = bytearray(u" ", 'utf-8') * len(source_line)
+        source_line = self.location.source_line().rstrip("\n")
+        highlight_line = bytearray(" ", 'utf-8') * len(source_line)
 
         for hilight in self.highlights:
             lft, rgt = hilight.column_range()
-            highlight_line[lft:rgt] = bytearray(u"~", 'utf-8') * hilight.size()
+            highlight_line[lft:rgt] = bytearray("~", 'utf-8') * hilight.size()
 
         lft, rgt = self.location.column_range()
-        highlight_line[lft:rgt] = bytearray(u"^", 'utf-8') * self.location.size()
+        highlight_line[lft:rgt] = bytearray("^", 'utf-8') * self.location.size()
 
         return [
-            u"%s: %s: %s" % (str(self.location), self.level, self.message()),
+            "%s: %s: %s" % (str(self.location), self.level, self.message()),
             source_line,
             highlight_line.decode('utf-8')
         ]

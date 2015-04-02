@@ -11,7 +11,7 @@ class LexerTestCase(unittest.TestCase):
             self.lexer = lexer.Lexer(self.buffer, version)
             for (range, token, data) in self.lexer:
                 if len(tokens) < 2:
-                    raise Exception(u"stray tokens: %s" % ((token,data),))
+                    raise Exception("stray tokens: %s" % ((token,data),))
                 expected_token, expected_data = tokens[:2]
                 tokens = tokens[2:]
                 self.assertEqual(expected_token, token)
@@ -39,146 +39,146 @@ class LexerTestCase(unittest.TestCase):
         self.assertDiagnosesVersions(input, self.VERSIONS, diag, *tokens)
 
     def test_empty(self):
-        self.assertLexes(u"")
+        self.assertLexes("")
 
     def test_newline(self):
-        self.assertLexes(u"\n",
-                         u"newline", None)
-        self.assertLexes(u"\r\n",
-                         u"newline", None)
-        self.assertLexes(u"\r",
-                         u"newline", None)
-        self.assertLexes(u"\\\n")
+        self.assertLexes("\n",
+                         "newline", None)
+        self.assertLexes("\r\n",
+                         "newline", None)
+        self.assertLexes("\r",
+                         "newline", None)
+        self.assertLexes("\\\n")
 
     def test_comment(self):
-        self.assertLexes(u"# foo")
+        self.assertLexes("# foo")
         self.assertEqual([(source.Range(self.buffer, 0, 5), "# foo")],
                          self.lexer.comments)
 
     def test_float(self):
-        self.assertLexes(u"0.0",
-                         u"float", 0.0)
-        self.assertLexes(u".0",
-                         u"float", 0.0)
-        self.assertLexes(u"0.",
-                         u"float", 0.0)
-        self.assertLexes(u"0.0e0",
-                         u"float", 0.0)
-        self.assertLexes(u".0e0",
-                         u"float", 0.0)
-        self.assertLexes(u"0.e0",
-                         u"float", 0.0)
-        self.assertLexes(u"0e0",
-                         u"float", 0.0)
-        self.assertLexes(u"0e00",
-                         u"float", 0.0)
-        self.assertLexes(u"0e+0",
-                         u"float", 0.0)
-        self.assertLexes(u"0e-0",
-                         u"float", 0.0)
+        self.assertLexes("0.0",
+                         "float", 0.0)
+        self.assertLexes(".0",
+                         "float", 0.0)
+        self.assertLexes("0.",
+                         "float", 0.0)
+        self.assertLexes("0.0e0",
+                         "float", 0.0)
+        self.assertLexes(".0e0",
+                         "float", 0.0)
+        self.assertLexes("0.e0",
+                         "float", 0.0)
+        self.assertLexes("0e0",
+                         "float", 0.0)
+        self.assertLexes("0e00",
+                         "float", 0.0)
+        self.assertLexes("0e+0",
+                         "float", 0.0)
+        self.assertLexes("0e-0",
+                         "float", 0.0)
 
     def test_complex(self):
-        self.assertLexes(u"1e+1j",
-                         u"complex", 10j)
-        self.assertLexes(u"10j",
-                         u"complex", 10j)
+        self.assertLexes("1e+1j",
+                         "complex", 10j)
+        self.assertLexes("10j",
+                         "complex", 10j)
 
     def test_integer(self):
-        self.assertLexes(u"0",
-                         u"int", 0)
-        self.assertLexes(u"123",
-                         u"int", 123)
-        self.assertLexes(u"0o123",
-                         u"int", 0o123)
-        self.assertLexes(u"0x123af",
-                         u"int", 0x123af)
-        self.assertLexes(u"0b0101",
-                         u"int", 0b0101)
+        self.assertLexes("0",
+                         "int", 0)
+        self.assertLexes("123",
+                         "int", 123)
+        self.assertLexes("0o123",
+                         "int", 0o123)
+        self.assertLexes("0x123af",
+                         "int", 0x123af)
+        self.assertLexes("0b0101",
+                         "int", 0b0101)
 
     def test_integer_py3(self):
         self.assertLexesVersions(
-                         u"0123", [(2,6)],
-                         u"int", 83)
+                         "0123", [(2,6)],
+                         "int", 83)
         self.assertLexesVersions(
-                         u"123L", [(2,6)],
-                         u"int", 123)
+                         "123L", [(2,6)],
+                         "int", 123)
         self.assertLexesVersions(
-                         u"123l", [(2,6)],
-                         u"int", 123)
+                         "123l", [(2,6)],
+                         "int", 123)
 
         self.assertDiagnosesVersions(
-                         u"0123", [(3,0)],
-                         [("error", u"in Python 3, decimal literals must not start with a zero", (0, 1))],
-                         u"int", 83)
+                         "0123", [(3,0)],
+                         [("error", "in Python 3, decimal literals must not start with a zero", (0, 1))],
+                         "int", 83)
         self.assertDiagnosesVersions(
-                         u"123L", [(3,0)],
-                         [("error", u"in Python 3, long integer literals were removed", (3, 4))],
-                         u"int", 123)
+                         "123L", [(3,0)],
+                         [("error", "in Python 3, long integer literals were removed", (3, 4))],
+                         "int", 123)
         self.assertDiagnosesVersions(
-                         u"123l", [(3,0)],
-                         [("error", u"in Python 3, long integer literals were removed", (3, 4))],
-                         u"int", 123)
+                         "123l", [(3,0)],
+                         [("error", "in Python 3, long integer literals were removed", (3, 4))],
+                         "int", 123)
 
     def test_string_literal(self):
-        self.assertLexes(u"\"",
-                         u"\"", "")
-        self.assertLexes(u"u\"",
-                         u"\"", "u")
-        self.assertLexes(u"ur\"",
-                         u"\"", "ur")
-        self.assertLexes(u"UR\"",
-                         u"\"", "ur")
+        self.assertLexes("\"",
+                         "\"", "")
+        self.assertLexes("u\"",
+                         "\"", "u")
+        self.assertLexes("ur\"",
+                         "\"", "ur")
+        self.assertLexes("UR\"",
+                         "\"", "ur")
 
-        self.assertLexes(u"'''",
-                         u"'''", "")
-        self.assertLexes(u"\"\"\"",
-                         u"\"\"\"", "")
+        self.assertLexes("'''",
+                         "'''", "")
+        self.assertLexes("\"\"\"",
+                         "\"\"\"", "")
 
     def test_identifier(self):
-        self.assertLexes(u"a",
-                         u"ident", "a")
-        self.assertLexes(u"andi",
-                         u"ident", "andi")
+        self.assertLexes("a",
+                         "ident", "a")
+        self.assertLexes("andi",
+                         "ident", "andi")
 
     def test_keywords(self):
-        self.assertLexes(u"/",
-                         u"/", None)
-        self.assertLexes(u"//",
-                         u"//", None)
-        self.assertLexes(u"//=",
-                         u"//=", None)
-        self.assertLexes(u"and",
-                         u"and", None)
+        self.assertLexes("/",
+                         "/", None)
+        self.assertLexes("//",
+                         "//", None)
+        self.assertLexes("//=",
+                         "//=", None)
+        self.assertLexes("and",
+                         "and", None)
 
         self.assertLexesVersions(
-                         u"<>", [(2,6),(3,1)],
-                         u"<>", None)
+                         "<>", [(2,6),(3,1)],
+                         "<>", None)
         self.assertLexesVersions(
-                         u"<>", [(3,0)],
-                         u"<", None,
-                         u">", None)
+                         "<>", [(3,0)],
+                         "<", None,
+                         ">", None)
 
     def test_implicit_joining(self):
-        self.assertLexes(u"[1,\n2]",
-                         u"[", None,
-                         u"int", 1,
-                         u",", None,
-                         u"int", 2,
-                         u"]", None)
+        self.assertLexes("[1,\n2]",
+                         "[", None,
+                         "int", 1,
+                         ",", None,
+                         "int", 2,
+                         "]", None)
 
     def test_diag_unrecognized(self):
         self.assertDiagnoses(
-                         u"$",
-                         [("fatal", u"unexpected '$'", (0, 1))])
+                         "$",
+                         [("fatal", "unexpected '$'", (0, 1))])
 
     def test_diag_delim_mismatch(self):
         self.assertDiagnoses(
-                         u"[)",
-                         [("fatal", u"mismatched ')'", (1, 2))],
-                         u"[", None)
+                         "[)",
+                         [("fatal", "mismatched ')'", (1, 2))],
+                         "[", None)
 
 """
     def test_(self):
-        self.assertLexes(u"",
+        self.assertLexes("",
                          )
 """

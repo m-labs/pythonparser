@@ -22,21 +22,21 @@ class Lexer:
     """
 
     _reserved_2_6 = frozenset([
-        u'!=', u'%', u'%=', u'&', u'&=', u'(', u')', u'*', u'**', u'**=', u'*=', u'+', u'+=',
-        u',', u'-', u'-=', u'.', u'/', u'//', u'//=', u'/=', u':', u';', u'<', u'<<', u'<<=',
-        u'<=', u'<>', u'=', u'==', u'>', u'>=', u'>>', u'>>=', u'@', u'[', u']', u'^', u'^=', u'`',
-        u'and', u'as', u'assert', u'break', u'class', u'continue', u'def', u'del', u'elif',
-        u'else', u'except', u'exec', u'finally', u'for', u'from', u'global', u'if', u'import',
-        u'in', u'is', u'lambda', u'not', u'or', u'pass', u'print', u'raise', u'return', u'try',
-        u'while', u'with', u'yield', u'{', u'|', u'|=', u'}', u'~'
+        "!=", "%", "%=", "&", "&=", "(", ")", "*", "**", "**=", "*=", "+", "+=",
+        ",", "-", "-=", ".", "/", "//", "//=", "/=", ":", ";", "<", "<<", "<<=",
+        "<=", "<>", "=", "==", ">", ">=", ">>", ">>=", "@", "[", "]", "^", "^=", "`",
+        "and", "as", "assert", "break", "class", "continue", "def", "del", "elif",
+        "else", "except", "exec", "finally", "for", "from", "global", "if", "import",
+        "in", "is", "lambda", "not", "or", "pass", "print", "raise", "return", "try",
+        "while", "with", "yield", "{", "|", "|=", "}", "~"
     ])
 
     _reserved_3_0 = _reserved_2_6 \
-        - set([u'<>', u'`', u'exec', u'print']) \
-        | set([u'->', u'...', u'False', u'None', u'nonlocal', u'True'])
+        - set(["<>", "`", "exec", "print"]) \
+        | set(["->", "...", "False", "None", "nonlocal", "True"])
 
     _reserved_3_1 = _reserved_3_0 \
-        | set([u'<>'])
+        | set(["<>"])
 
     _reserved = {
         (2, 6): _reserved_2_6,
@@ -86,7 +86,7 @@ class Lexer:
         # otherwise grab all keywords; it is made to work by making it impossible
         # for the keyword case to match a word prefix, and ordering it before
         # the identifier case.
-        self.lex_token = re.compile(u"""
+        self.lex_token = re.compile("""
         [ \t\f]* # initial whitespace
         ( # 1
             (\\\\)? # ?2 line continuation
@@ -145,8 +145,8 @@ class Lexer:
             self.source_buffer.source, self.offset)
         if match is None:
             diag = diagnostic.Diagnostic(
-                "fatal", u"unexpected {character}",
-                {"character": repr(self.source_buffer.source[self.offset]).lstrip(u"u")},
+                "fatal", "unexpected {character}",
+                {"character": repr(self.source_buffer.source[self.offset]).lstrip("u")},
                 source.Range(self.source_buffer, self.offset, self.offset + 1))
             raise diagnostic.DiagnosticException(diag)
         self.offset = match.end(0)
@@ -198,7 +198,7 @@ class Lexer:
             literal = match.group(12)
             if len(literal) > 1 and self.version >= (3, 0):
                 error = diagnostic.Diagnostic(
-                    "error", u"in Python 3, decimal literals must not start with a zero", {},
+                    "error", "in Python 3, decimal literals must not start with a zero", {},
                     source.Range(self.source_buffer, tok_range.begin_pos, tok_range.begin_pos + 1))
                 raise diagnostic.DiagnosticException(error)
             return tok_range, "int", int(literal, 8)
@@ -217,47 +217,47 @@ class Lexer:
         assert False
 
     def _check_long_literal(self, range, literal):
-        if literal[-1] in 'lL' and self.version >= (3, 0):
+        if literal[-1] in "lL" and self.version >= (3, 0):
             error = diagnostic.Diagnostic(
-                "error", u"in Python 3, long integer literals were removed", {},
+                "error", "in Python 3, long integer literals were removed", {},
                 source.Range(self.source_buffer, range.end_pos - 1, range.end_pos))
             raise diagnostic.DiagnosticException(error)
 
     def _match_pair_delim(self, range, kwop):
-        if kwop == '(':
+        if kwop == "(":
             self.parentheses.append(range)
-        elif kwop == '[':
+        elif kwop == "[":
             self.square_braces.append(range)
-        elif kwop == '{':
+        elif kwop == "{":
             self.curly_braces.append(range)
-        elif kwop == ')':
-            self._check_innermost_pair_delim(range, '(')
+        elif kwop == ")":
+            self._check_innermost_pair_delim(range, "(")
             self.parentheses.pop()
-        elif kwop == ']':
-            self._check_innermost_pair_delim(range, '[')
+        elif kwop == "]":
+            self._check_innermost_pair_delim(range, "[")
             self.square_braces.pop()
-        elif kwop == '}':
-            self._check_innermost_pair_delim(range, '{')
+        elif kwop == "}":
+            self._check_innermost_pair_delim(range, "{")
             self.curly_braces.pop()
 
     def _check_innermost_pair_delim(self, range, expected):
         ranges = []
         if len(self.parentheses) > 0:
-            ranges.append(('(', self.parentheses[-1]))
+            ranges.append(("(", self.parentheses[-1]))
         if len(self.square_braces) > 0:
-            ranges.append(('[', self.square_braces[-1]))
+            ranges.append(("[", self.square_braces[-1]))
         if len(self.curly_braces) > 0:
-            ranges.append(('{', self.curly_braces[-1]))
+            ranges.append(("{", self.curly_braces[-1]))
 
         ranges.sort(key=lambda k: k[1].begin_pos)
         compl_kind, compl_range = ranges[-1]
         if compl_kind != expected:
             note = diagnostic.Diagnostic(
-                "note", u"'{delimiter}' opened here",
+                "note", "'{delimiter}' opened here",
                 {"delimiter": compl_kind},
                 compl_range)
             error = diagnostic.Diagnostic(
-                "fatal", u"mismatched '{delimiter}'",
+                "fatal", "mismatched '{delimiter}'",
                 {"delimiter": range.source()},
                 range, notes=[note])
             raise diagnostic.DiagnosticException(error)

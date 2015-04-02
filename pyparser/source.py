@@ -60,7 +60,7 @@ class Buffer:
         self._line_begins = [0]
         index = None
         while True:
-            index = self.source.find(u"\n", index) + 1
+            index = self.source.find("\n", index) + 1
             if index == 0:
                 return self._line_begins
             self._line_begins.append(index)

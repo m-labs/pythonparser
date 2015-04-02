@@ -142,9 +142,10 @@ class Lexer:
             |   (""\"|'''|"|')
             )
         |   ((?:{keywords})\b|{operators}) # 21 keywords and operators
-        |   ([A-Za-z_][A-Za-z0-9_]*) # 22 identifier
+        |   ([A-Za-z_][A-Za-z0-9_]*\b) # 22 identifier
+        |   (\p{{XID_Start}}\p{{XID_Continue}}*) # 23 Unicode identifier
         )
-        """.format(keywords=re_keywords, operators=re_operators), re.VERBOSE)
+        """.format(keywords=re_keywords, operators=re_operators), re.VERBOSE|re.UNICODE)
 
     # These are identical for all lexer instances.
     _lex_escape_re = re.compile(r"""
@@ -279,6 +280,14 @@ class Lexer:
 
         elif match.group(22) is not None: # identifier
             return tok_range, "ident", match.group(22)
+
+        elif match.group(23) is not None: # identifier
+            if self.version < (3, 0):
+                error = diagnostic.Diagnostic(
+                    "error", "in Python 2, Unicode identifiers are not allowed", {},
+                    tok_range)
+                raise diagnostic.DiagnosticException(error)
+            return tok_range, "ident", match.group(23)
 
         assert False
 

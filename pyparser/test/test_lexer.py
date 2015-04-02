@@ -200,6 +200,19 @@ class LexerTestCase(unittest.TestCase):
                          "ident", "a")
         self.assertLexes("andi",
                          "ident", "andi")
+        self.assertLexesVersions(
+                         "ышка", [(3,0)],
+                         "ident", "ышка")
+        self.assertLexesVersions(
+                         "ышкаs", [(3,0)],
+                         "ident", "ышкаs")
+        self.assertLexesVersions(
+                         "sышка", [(3,0)],
+                         "ident", "sышка")
+
+        self.assertDiagnosesVersions(
+                         "ышка", [(2,7)],
+                         [("error", "in Python 2, Unicode identifiers are not allowed", (0, 4))])
 
     def test_keywords(self):
         self.assertLexes("/",

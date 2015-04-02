@@ -54,6 +54,8 @@ class Lexer:
 
     def __init__(self, source_buffer, version):
         self.source_buffer = source_buffer
+        self.version = version
+
         self.offset = 0
         self.comments = []
         self.queue = []
@@ -99,16 +101,17 @@ class Lexer:
             ) ([jJ])? # ?6 complex suffix
         |   ([0-9]+) [jJ] # 7 complex literal
         |   (?: # integer literal
-                ( [1-9]  [0-9]* )       # 8 dec
-            |   0[oO]? ( [0-7]+ )       # 9 oct
-            |   0[xX]  ( [0-9A-Fa-f]+ ) # 10 hex
-            |   0[bB]  ( [01]+ )        # 11 bin
+                ( [1-9]   [0-9]* )       # 8 dec
+            |     0[oO] ( [0-7]+ )       # 9 oct
+            |     0[xX] ( [0-9A-Fa-f]+ ) # 10 hex
+            |     0[bB] ( [01]+ )        # 11 bin
+            |   ( [0-9]   [0-9]* )       # 12 bare oct
             )
             [Ll]?
-        |   ([BbUu]?[Rr]?) # ?12 string literal options
-            (""\"|"|'''|') # 13 string literal start
-        |   ((?:{keywords})\\b|{operators}) # 14 keywords and operators
-        |   ([A-Za-z_][A-Za-z0-9_]*) # 15 identifier
+        |   ([BbUu]?[Rr]?) # ?13 string literal options
+            (""\"|"|'''|') # 14 string literal start
+        |   ((?:{keywords})\\b|{operators}) # 15 keywords and operators
+        |   ([A-Za-z_][A-Za-z0-9_]*) # 16 identifier
         )
         """.format(keywords=re_keywords, operators=re_operators), re.VERBOSE)
 
@@ -157,34 +160,68 @@ class Lexer:
                 # 2.1.5. Explicit line joining
                 return self._lex()
             return tok_range, "newline", None
+
         elif match.group(4) is not None: # comment
             self.comments.append((tok_range, match.group(4)))
             return self._lex()
+
         elif match.group(5) is not None: # floating point or complex literal
             if match.group(6) is None:
                 return tok_range, "float", float(match.group(5))
             else:
                 return tok_range, "complex", float(match.group(5)) * 1j
+
         elif match.group(7) is not None: # complex literal
             return tok_range, "complex", int(match.group(7)) * 1j
+
         elif match.group(8) is not None: # integer literal, dec
-            return tok_range, "int", int(match.group(8))
+            literal = match.group(8)
+            self._check_long_literal(tok_range, match.group(1))
+            return tok_range, "int", int(literal)
+
         elif match.group(9) is not None: # integer literal, oct
-            return tok_range, "int", int(match.group(9), 8)
+            literal = match.group(9)
+            self._check_long_literal(tok_range, match.group(1))
+            return tok_range, "int", int(literal, 8)
+
         elif match.group(10) is not None: # integer literal, hex
-            return tok_range, "int", int(match.group(10), 16)
+            literal = match.group(10)
+            self._check_long_literal(tok_range, match.group(1))
+            return tok_range, "int", int(literal, 16)
+
         elif match.group(11) is not None: # integer literal, bin
-            return tok_range, "int", int(match.group(11), 2)
-        elif match.group(13) is not None: # string literal start
-            options = match.group(12).lower()
-            return tok_range, match.group(13), options
-        elif match.group(14) is not None: # keywords and operators
-            self._match_pair_delim(tok_range, match.group(14))
-            return tok_range, match.group(14), None
-        elif match.group(15) is not None: # identifier
-            return tok_range, "ident", match.group(15)
-        else:
-            assert False
+            literal = match.group(11)
+            self._check_long_literal(tok_range, match.group(1))
+            return tok_range, "int", int(literal, 2)
+
+        elif match.group(12) is not None: # integer literal, bare oct
+            literal = match.group(12)
+            if len(literal) > 1 and self.version >= (3, 0):
+                error = diagnostic.Diagnostic(
+                    "error", u"in Python 3, decimal literals must not start with a zero", {},
+                    source.Range(self.source_buffer, tok_range.begin_pos, tok_range.begin_pos + 1))
+                raise diagnostic.DiagnosticException(error)
+            return tok_range, "int", int(literal, 8)
+
+        elif match.group(14) is not None: # string literal start
+            options = match.group(13).lower()
+            return tok_range, match.group(14), options
+
+        elif match.group(15) is not None: # keywords and operators
+            self._match_pair_delim(tok_range, match.group(15))
+            return tok_range, match.group(15), None
+
+        elif match.group(16) is not None: # identifier
+            return tok_range, "ident", match.group(16)
+
+        assert False
+
+    def _check_long_literal(self, range, literal):
+        if literal[-1] in 'lL' and self.version >= (3, 0):
+            error = diagnostic.Diagnostic(
+                "error", u"in Python 3, long integer literals were removed", {},
+                source.Range(self.source_buffer, range.end_pos - 1, range.end_pos))
+            raise diagnostic.DiagnosticException(error)
 
     def _match_pair_delim(self, range, kwop):
         if kwop == '(':

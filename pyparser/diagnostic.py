@@ -96,4 +96,4 @@ class DiagnosticException(Exception):
 
     def __str__(self):
         return "\n".join(self.diagnostic.render() +
-                         reduce(list.__add__, map(Diagnostic.render, self.diagnostic.notes)))
+                         reduce(list.__add__, map(Diagnostic.render, self.diagnostic.notes), []))

@@ -4,39 +4,39 @@ import unittest
 
 class LexerTestCase(unittest.TestCase):
 
-    def assertLexesVersion(self, input, version, *tokens):
-        self.buffer = source.Buffer(input)
-        self.lexer = lexer.Lexer(self.buffer, version)
-        for (range, token, data) in self.lexer:
-            if len(tokens) < 2:
-                raise Exception(u"stray tokens: %s" % (token,data))
-            expected_token, expected_data = tokens[:2]
-            tokens = tokens[2:]
-            self.assertEqual(expected_token, token)
-            self.assertEqual(expected_data, data)
-        self.assertEqual((), tokens)
+    def assertLexesVersions(self, input, versions, *expected_tokens):
+        for version in versions:
+            tokens = expected_tokens
+            self.buffer = source.Buffer(input)
+            self.lexer = lexer.Lexer(self.buffer, version)
+            for (range, token, data) in self.lexer:
+                if len(tokens) < 2:
+                    raise Exception(u"stray tokens: %s" % ((token,data),))
+                expected_token, expected_data = tokens[:2]
+                tokens = tokens[2:]
+                self.assertEqual(expected_token, token)
+                self.assertEqual(expected_data, data)
+            self.assertEqual((), tokens)
 
-    def assertDiagnosesVersion(self, input, version, diag, *tokens):
-        try:
-            self.assertLexesVersion(input, version, *tokens)
-        except diagnostic.DiagnosticException as e:
-            reason, args, loc = diag
-            self.assertEqual(reason, e.diagnostic.reason)
-            self.assertEqual(args, e.diagnostic.arguments)
-            self.assertEqual(source.Range(self.buffer, *loc),
-                             e.diagnostic.location)
-            return
-        self.assert_("Expected a diagnostic")
+    def assertDiagnosesVersions(self, input, versions, diag, *tokens):
+        for version in versions:
+            try:
+                self.assertLexesVersions(input, [version], *tokens)
+                self.fail("Expected a diagnostic")
+            except diagnostic.DiagnosticException as e:
+                level, message, loc = diag[0]
+                self.assertEqual(level, e.diagnostic.level)
+                self.assertEqual(message, e.diagnostic.message())
+                self.assertEqual(source.Range(self.buffer, *loc),
+                                 e.diagnostic.location)
 
     VERSIONS = [(2,6), (3,0), (3,1)]
 
     def assertLexes(self, input, *tokens):
-        for version in self.VERSIONS:
-            self.assertLexesVersion(input, version, *tokens)
+        self.assertLexesVersions(input, self.VERSIONS, *tokens)
 
     def assertDiagnoses(self, input, diag, *tokens):
-        for version in self.VERSIONS:
-            self.assertDiagnosesVersion(input, version, diag, *tokens)
+        self.assertDiagnosesVersions(input, self.VERSIONS, diag, *tokens)
 
     def test_empty(self):
         self.assertLexes(u"")
@@ -84,19 +84,39 @@ class LexerTestCase(unittest.TestCase):
                          u"complex", 10j)
 
     def test_integer(self):
+        self.assertLexes(u"0",
+                         u"int", 0)
         self.assertLexes(u"123",
                          u"int", 123)
-        self.assertLexes(u"0123",
-                         u"int", 83)
         self.assertLexes(u"0o123",
                          u"int", 0o123)
         self.assertLexes(u"0x123af",
                          u"int", 0x123af)
         self.assertLexes(u"0b0101",
                          u"int", 0b0101)
-        self.assertLexes(u"123L",
+
+    def test_integer_py3(self):
+        self.assertLexesVersions(
+                         u"0123", [(2,6)],
+                         u"int", 83)
+        self.assertLexesVersions(
+                         u"123L", [(2,6)],
                          u"int", 123)
-        self.assertLexes(u"123l",
+        self.assertLexesVersions(
+                         u"123l", [(2,6)],
+                         u"int", 123)
+
+        self.assertDiagnosesVersions(
+                         u"0123", [(3,0)],
+                         [("error", u"in Python 3, decimal literals must not start with a zero", (0, 1))],
+                         u"int", 83)
+        self.assertDiagnosesVersions(
+                         u"123L", [(3,0)],
+                         [("error", u"in Python 3, long integer literals were removed", (3, 4))],
+                         u"int", 123)
+        self.assertDiagnosesVersions(
+                         u"123l", [(3,0)],
+                         [("error", u"in Python 3, long integer literals were removed", (3, 4))],
                          u"int", 123)
 
     def test_string_literal(self):
@@ -130,13 +150,13 @@ class LexerTestCase(unittest.TestCase):
         self.assertLexes(u"and",
                          u"and", None)
 
-        self.assertLexesVersion(u"<>", (2,6),
-                                u"<>", None)
-        self.assertLexesVersion(u"<>", (3,0),
-                                u"<", None,
-                                u">", None)
-        self.assertLexesVersion(u"<>", (3,1),
-                                u"<>", None)
+        self.assertLexesVersions(
+                         u"<>", [(2,6),(3,1)],
+                         u"<>", None)
+        self.assertLexesVersions(
+                         u"<>", [(3,0)],
+                         u"<", None,
+                         u">", None)
 
     def test_implicit_joining(self):
         self.assertLexes(u"[1,\n2]",
@@ -147,13 +167,15 @@ class LexerTestCase(unittest.TestCase):
                          u"]", None)
 
     def test_diag_unrecognized(self):
-        self.assertDiagnoses(u"$",
-                             (u"unexpected {character}", {"character": "'$'"}, (0, 1)))
+        self.assertDiagnoses(
+                         u"$",
+                         [("fatal", u"unexpected '$'", (0, 1))])
 
     def test_diag_delim_mismatch(self):
-        self.assertDiagnoses(u"[)",
-                             (u"mismatched '{delimiter}'", {"delimiter": u")"}, (1, 2)),
-                             u"[", None)
+        self.assertDiagnoses(
+                         u"[)",
+                         [("fatal", u"mismatched ')'", (1, 2))],
+                         u"[", None)
 
 """
     def test_(self):

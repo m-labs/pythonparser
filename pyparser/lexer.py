@@ -81,6 +81,8 @@ class Lexer:
         self.version = version
 
         self.offset = 0
+        self.new_line = True
+        self.indent = [0]
         self.comments = []
         self.queue = []
         self.parentheses = []
@@ -211,9 +213,17 @@ class Lexer:
             if match.group(2) is not None:
                 # 2.1.5. Explicit line joining
                 return self._lex()
+            if self.new_line:
+                # 2.1.7. Blank lines
+                return self._lex()
+
+            self.new_line = True
             return tok_range, "newline", None
 
-        elif match.group(4) is not None: # comment
+        # Lexing non-whitespace now.
+        self.new_line = False
+
+        if match.group(4) is not None: # comment
             self.comments.append((tok_range, match.group(4)))
             return self._lex()
 

@@ -248,6 +248,48 @@ class LexerTestCase(unittest.TestCase):
                          "int", 2,
                          "]", None)
 
+    def test_indent(self):
+        self.assertLexes("  x\n  x\n    x\nx\n",
+                         "indent",  None,
+                         "ident",   "x",
+                         "newline", None,
+                         "ident",   "x",
+                         "newline", None,
+                         "indent",  None,
+                         "ident",   "x",
+                         "newline", None,
+                         "dedent",  None,
+                         "dedent",  None,
+                         "ident",   "x",
+                         "newline", None)
+
+        self.assertDiagnoses(
+                         "  x\n    x\n x\n",
+                         [("fatal", "inconsistent indentation", (11, 11))],
+                         "indent",  None,
+                         "ident",   "x",
+                         "newline", None,
+                         "indent",  None,
+                         "ident",   "x",
+                         "newline", None)
+
+        self.assertLexesVersions(
+                         "    \tx\n\tx\n        x\n", [(2,7)],
+                         "indent",  None,
+                         "ident",   "x",
+                         "newline", None,
+                         "ident",   "x",
+                         "newline", None,
+                         "ident",   "x",
+                         "newline", None)
+
+        self.assertDiagnosesVersions(
+                         "    \tx\n\tx", [(3,0)],
+                         [("error", "inconsistent use of tabs and spaces in indentation", (8, 8))],
+                         "indent",  None,
+                         "ident",   "x",
+                         "newline", None)
+
     def test_diag_unrecognized(self):
         self.assertDiagnoses(
                          "$",

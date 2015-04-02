@@ -73,10 +73,12 @@ class Diagnostic:
 
         for hilight in self.highlights:
             lft, rgt = hilight.column_range()
-            highlight_line[lft:rgt] = bytearray("~", 'utf-8') * hilight.size()
+            highlight_line[lft:rgt] = bytearray("~", 'utf-8') * (rgt - lft)
 
         lft, rgt = self.location.column_range()
-        highlight_line[lft:rgt] = bytearray("^", 'utf-8') * self.location.size()
+        if rgt == lft: # Expand zero-length ranges to one ^
+            rgt = lft + 1
+        highlight_line[lft:rgt] = bytearray("^", 'utf-8') * (rgt - lft)
 
         return [
             "%s: %s: %s" % (str(self.location), self.level, self.message()),

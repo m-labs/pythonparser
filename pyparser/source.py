@@ -23,7 +23,7 @@ class Buffer:
         self._line_begins = None
 
     def __repr__(self):
-        return r'Buffer("%s")' % self.name
+        return "Buffer(\"%s\")" % self.name
 
     def source_line(self, lineno):
         """
@@ -81,7 +81,7 @@ class Range:
         """
         Returns a human-readable representation of this range.
         """
-        return r'Range("%s", %d, %d)' % \
+        return "Range(\"%s\", %d, %d)" % \
             (self.source_buffer.name, self.begin_pos, self.end_pos)
 
     def begin(self):
@@ -151,7 +151,7 @@ class Range:
         """
         Returns a Clang-style string representation of the beginning of this range.
         """
-        return ':'.join([self.source_buffer.name,
+        return ":".join([self.source_buffer.name,
                          str(self.line()), str(self.column() + 1)])
 
     def __eq__(self, other):

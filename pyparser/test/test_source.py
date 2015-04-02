@@ -7,7 +7,7 @@ class BufferTestCase(unittest.TestCase):
         self.buffer = source.Buffer(u"line one\nline two\n\nline four")
 
     def test_repr(self):
-        self.assertEqual(ur'Buffer("<input>")', repr(self.buffer))
+        self.assertEqual(u"Buffer(\"<input>\")", repr(self.buffer))
 
     def test_source_line(self):
         self.assertEqual(u"line one\n", self.buffer.source_line(1))
@@ -37,7 +37,7 @@ class RangeTestCase(unittest.TestCase):
         return source.Range(self.buffer, lft, rgt)
 
     def test_repr(self):
-        self.assertEqual(ur'Range("<input>", 0, 2)',
+        self.assertEqual(u"Range(\"<input>\", 0, 2)",
                          repr(self.range(0, 2)))
 
     def test_begin(self):

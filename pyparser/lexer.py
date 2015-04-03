@@ -99,6 +99,12 @@ class Lexer:
         re_keywords  = "|".join([kw for kw in re_reserved if kw.isalnum()])
         re_operators = "|".join([re.escape(op) for op in re_reserved if not op.isalnum()])
 
+        # Python 3.0 uses ID_Start, >3.0 uses XID_Start
+        if self.version == (3, 0):
+            id_xid = ""
+        else:
+            id_xid = "X"
+
         # To speed things up on CPython, we use the re module to generate a DFA
         # from our token set and execute it in C. Every result yielded by
         # iterating this regular expression has exactly one non-empty group
@@ -145,10 +151,11 @@ class Lexer:
             )
         |   ((?:{keywords})\b|{operators}) # 21 keywords and operators
         |   ([A-Za-z_][A-Za-z0-9_]*\b) # 22 identifier
-        |   (\p{{XID_Start}}\p{{XID_Continue}}*) # 23 Unicode identifier
+        |   (\p{{{id_xid}ID_Start}}\p{{{id_xid}ID_Continue}}*) # 23 Unicode identifier
         |   ($) # 24 end-of-file
         )
-        """.format(keywords=re_keywords, operators=re_operators), re.VERBOSE|re.UNICODE)
+        """.format(keywords=re_keywords, operators=re_operators,
+                   id_xid=id_xid), re.VERBOSE|re.UNICODE)
 
     # These are identical for all lexer instances.
     _lex_escape_re = re.compile(r"""

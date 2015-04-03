@@ -1,0 +1,36 @@
+--- 3.2	2015-04-03 10:48:32.064032495 +0300
++++ 3.3	2015-04-03 10:48:56.932103514 +0300
+@@ -161 +161 @@
+-stringprefix    ::=  "r" | "R"
++stringprefix    ::=  "r" | "u" | "R" | "U"
+@@ -170 +170 @@
+-bytesprefix    ::=  "b" | "B" | "br" | "Br" | "bR" | "BR"
++bytesprefix    ::=  "b" | "B" | "br" | "Br" | "bR" | "BR" | "rb" | "rB" | "Rb" | "RB"
+@@ -184 +184,7 @@
+-Both string and bytes literals may optionally be prefixed with a letter 'r' or 'R'; such strings are called raw strings and treat backslashes as literal characters. As a result, in string literals, '\U' and '\u' escapes in raw strings are not treated specially.
++As of Python 3.3 it is possible again to prefix unicode strings with a u prefix to simplify maintenance of dual 2.x and 3.x codebases.
++
++Both string and bytes literals may optionally be prefixed with a letter 'r' or 'R'; such strings are called raw strings and treat backslashes as literal characters. As a result, in string literals, '\U' and '\u' escapes in raw strings are not treated specially. Given that Python 2.x’s raw unicode literals behave differently than Python 3.x’s the 'ur' syntax is not supported.
++
++New in version 3.3: The 'rb' prefix of raw bytes literals has been added as a synonym of 'br'.
++
++New in version 3.3: Support for the unicode legacy literal (u'value') was reintroduced to simplify the maintenance of dual Python 2.x and 3.x codebases. See PEP 414 for more information.
+@@ -207,3 +213,3 @@
+-\N{name}	Character named name in the Unicode database	 
+-\uxxxx	Character with 16-bit hex value xxxx	(4)
+-\Uxxxxxxxx	Character with 32-bit hex value xxxxxxxx	(5)
++\N{name}	Character named name in the Unicode database	(4)
++\uxxxx	Character with 16-bit hex value xxxx	(5)
++\Uxxxxxxxx	Character with 32-bit hex value xxxxxxxx	(6)
+@@ -214,0 +223,3 @@
++
++Changed in version 3.3: Support for name aliases [1] has been added.
++
+@@ -216 +227,3 @@
+-Any Unicode character can be encoded this way, but characters outside the Basic Multilingual Plane (BMP) will be encoded using a surrogate pair if Python is compiled to use 16-bit code units (the default). Exactly eight hex digits are required.
++
++Any Unicode character can be encoded this way. Exactly eight hex digits are required.
++
+@@ -287 +300 @@
+-,       :       .       ;       @       =
++,       :       .       ;       @       =       ->

@@ -1,0 +1,42 @@
+--- 3.0	2015-04-03 10:46:36.623702436 +0300
++++ 3.1	2015-04-03 10:46:57.399761884 +0300
+@@ -110,3 +110,5 @@
+-identifier  ::=  id_start id_continue*
+-id_start    ::=  <all characters in general categories Lu, Ll, Lt, Lm, Lo, Nl, the underscore, and characters with the Other_ID_Start property>
+-id_continue ::=  <all characters in id_start, plus characters in the categories Mn, Mc, Nd, Pc and others with the Other_ID_Continue property>
++identifier   ::=  xid_start xid_continue*
++id_start     ::=  <all characters in general categories Lu, Ll, Lt, Lm, Lo, Nl, the underscore, and characters with the Other_ID_Start property>
++id_continue  ::=  <all characters in id_start, plus characters in the categories Mn, Mc, Nd, Pc and others with the Other_ID_Continue property>
++xid_start    ::=  <all characters in id_start whose NFKC normalization is in "id_start xid_continue*">
++xid_continue ::=  <all characters in id_continue whose NFKC normalization is in "id_continue*">
+@@ -125 +127,3 @@
+-All identifiers are converted into the normal form NFC while parsing; comparison of identifiers is based on NFC.
++Other_ID_Start - explicit list of characters in PropList.txt to support backwards compatibility
++Other_ID_Continue - likewise
++All identifiers are converted into the normal form NFKC while parsing; comparison of identifiers is based on NFKC.
+@@ -147 +151 @@
+-System-defined names. These names are defined by the interpreter and its implementation (including the standard library); applications should not expect to define additional names using this convention. The set of names of this class defined by Python may be extended in future versions. See section Special method names.
++System-defined names. These names are defined by the interpreter and its implementation (including the standard library). Current system names are discussed in the Special method names section and elsewhere. More will likely be defined in future versions of Python. Any use of __*__ names, in any context, that does not follow explicitly documented use, is subject to breakage without warning.
+@@ -166 +170 @@
+-bytesprefix    ::=  "b" | "B"
++bytesprefix    ::=  "b" | "B" | "br" | "Br" | "bR" | "BR"
+@@ -178,2 +181,0 @@
+-String literals may optionally be prefixed with a letter 'r' or 'R'; such strings are called raw strings and treat backslashes as literal characters. As a result, '\U' and '\u' escapes in raw strings are not treated specially.
+-
+@@ -181,0 +184,2 @@
++Both string and bytes literals may optionally be prefixed with a letter 'r' or 'R'; such strings are called raw strings and treat backslashes as literal characters. As a result, in string literals, '\U' and '\u' escapes in raw strings are not treated specially.
++
+@@ -209 +213 @@
+-Unlike in Standard C, at most two hex digits are accepted.
++Unlike in Standard C, exactly two hex digits are required.
+@@ -211,2 +215,2 @@
+-Individual code units which form parts of a surrogate pair can be encoded using this escape sequence. Unlike in Standard C, exactly two hex digits are required.
+-Any Unicode character can be encoded this way, but characters outside the Basic Multilingual Plane (BMP) will be encoded using a surrogate pair if Python is compiled to use 16-bit code units (the default). Individual code units which form parts of a surrogate pair can be encoded using this escape sequence.
++Individual code units which form parts of a surrogate pair can be encoded using this escape sequence. Exactly four hex digits are required.
++Any Unicode character can be encoded this way, but characters outside the Basic Multilingual Plane (BMP) will be encoded using a surrogate pair if Python is compiled to use 16-bit code units (the default). Exactly eight hex digits are required.
+@@ -217,1 +221,1 @@
+-Multiple adjacent string literals (delimited by whitespace), possibly using different quoting conventions, are allowed, and their meaning is the same as their concatenation. Thus, "hello" 'world' is equivalent to "helloworld". This feature can be used to reduce the number of backslashes needed, to split long strings conveniently across long lines, or even to add comments to parts of strings, for example:
++Multiple adjacent string or bytes literals (delimited by whitespace), possibly using different quoting conventions, are allowed, and their meaning is the same as their concatenation. Thus, "hello" 'world' is equivalent to "helloworld". This feature can be used to reduce the number of backslashes needed, to split long strings conveniently across long lines, or even to add comments to parts of strings, for example:
+@@ -293 +297 @@
+-$       ?
++$       ?       `

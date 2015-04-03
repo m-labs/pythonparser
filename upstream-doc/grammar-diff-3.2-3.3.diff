@@ -1,0 +1,6 @@
+--- 3.2	2015-04-03 11:09:22.835535774 +0300
++++ 3.3	2015-04-03 11:09:38.243578496 +0300
+@@ -132 +132,2 @@
+-yield_expr: 'yield' [testlist]
++yield_expr: 'yield' [yield_arg]
++yield_arg: 'from' test | testlist

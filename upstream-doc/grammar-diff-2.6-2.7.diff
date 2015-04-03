@@ -1,0 +1,32 @@
+--- 2.6	2015-04-03 11:08:37.607410329 +0300
++++ 2.7	2015-04-03 11:08:49.663443774 +0300
+@@ -83,2 +71,2 @@
+-with_stmt: 'with' test [ with_var ] ':' suite
+-with_var: 'as' expr
++with_stmt: 'with' with_item (',' with_item)*  ':' suite
++with_item: test ['as' expr]
+@@ -115 +103 @@
+-atom: ('(' [yield_expr|testlist_gexp] ')' |
++atom: ('(' [yield_expr|testlist_comp] ')' |
+@@ -117 +105 @@
+-       '{' [dictmaker] '}' |
++       '{' [dictorsetmaker] '}' |
+@@ -121 +109 @@
+-testlist_gexp: test ( gen_for | (',' test)* [','] )
++testlist_comp: test ( comp_for | (',' test)* [','] )
+@@ -129 +117,2 @@
+-dictmaker: test ':' test (',' test ':' test)* [',']
++dictorsetmaker: ( (test ':' test (comp_for | (',' test ':' test)* [','])) |
++                  (test (comp_for | (',' test)* [','])) )
+@@ -136 +125,3 @@
+-argument: test [gen_for] | test '=' test  # Really [keyword '='] test
++# The reason that keywords are test nodes instead of NAME is that using NAME
++# results in an ambiguity. ast.c makes sure it's a NAME.
++argument: test [comp_for] | test '=' test
+@@ -142,3 +133,3 @@
+-gen_iter: gen_for | gen_if
+-gen_for: 'for' exprlist 'in' or_test [gen_iter]
+-gen_if: 'if' old_test [gen_iter]
++comp_iter: comp_for | comp_if
++comp_for: 'for' exprlist 'in' or_test [comp_iter]
++comp_if: 'if' old_test [comp_iter]

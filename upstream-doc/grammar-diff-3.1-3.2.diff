@@ -1,0 +1,36 @@
+--- 3.1	2015-04-03 11:09:12.495507099 +0300
++++ 3.2	2015-04-03 11:09:22.835535774 +0300
+@@ -27,3 +27,3 @@
+-typedargslist: ((tfpdef ['=' test] ',')*
+-                ('*' [tfpdef] (',' tfpdef ['=' test])* [',' '**' tfpdef] | '**' tfpdef)
+-                | tfpdef ['=' test] (',' tfpdef ['=' test])* [','])
++typedargslist: (tfpdef ['=' test] (',' tfpdef ['=' test])* [','
++       ['*' [tfpdef] (',' tfpdef ['=' test])* [',' '**' tfpdef] | '**' tfpdef]]
++     |  '*' [tfpdef] (',' tfpdef ['=' test])* [',' '**' tfpdef] | '**' tfpdef)
+@@ -31,3 +31,3 @@
+-varargslist: ((vfpdef ['=' test] ',')*
+-              ('*' [vfpdef] (',' vfpdef ['=' test])*  [',' '**' vfpdef] | '**' vfpdef)
+-              | vfpdef ['=' test] (',' vfpdef ['=' test])* [','])
++varargslist: (vfpdef ['=' test] (',' vfpdef ['=' test])* [','
++       ['*' [vfpdef] (',' vfpdef ['=' test])* [',' '**' vfpdef] | '**' vfpdef]]
++     |  '*' [vfpdef] (',' vfpdef ['=' test])* [',' '**' vfpdef] | '**' vfpdef)
+@@ -40,2 +40,3 @@
+-expr_stmt: testlist (augassign (yield_expr|testlist) |
+-                     ('=' (yield_expr|testlist))*)
++expr_stmt: testlist_star_expr (augassign (yield_expr|testlist) |
++                     ('=' (yield_expr|testlist_star_expr))*)
++testlist_star_expr: (test|star_expr) (',' (test|star_expr))* [',']
+@@ -89 +90,3 @@
+-comparison: star_expr (comp_op star_expr)*
++comparison: expr (comp_op expr)*
++# <> isn't actually a valid comparison operator in Python. It's here for the
++# sake of a __future__ import described in PEP 401
+@@ -104 +107 @@
+-testlist_comp: test ( comp_for | (',' test)* [','] )
++testlist_comp: (test|star_expr) ( comp_for | (',' (test|star_expr))* [','] )
+@@ -109 +112 @@
+-exprlist: star_expr (',' star_expr)* [',']
++exprlist: (expr|star_expr) (',' (expr|star_expr))* [',']
+@@ -125,2 +127,0 @@
+-
+-testlist1: test (',' test)*

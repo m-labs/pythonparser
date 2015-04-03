@@ -1,0 +1,13 @@
+--- 3.0	2015-04-03 11:09:02.483479332 +0300
++++ 3.1	2015-04-03 11:09:12.495507099 +0300
+@@ -76,2 +76,2 @@
+-with_stmt: 'with' test [ with_var ] ':' suite
+-with_var: 'as' expr
++with_stmt: 'with' with_item (',' with_item)*  ':' suite
++with_item: test ['as' expr]
+@@ -90 +90 @@
+-comp_op: '<'|'>'|'=='|'>='|'<='|'!='|'in'|'not' 'in'|'is'|'is' 'not'
++comp_op: '<'|'>'|'=='|'>='|'<='|'<>'|'!='|'in'|'not' 'in'|'is'|'is' 'not'
+@@ -118,0 +119,2 @@
++# The reason that keywords are test nodes instead of NAME is that using NAME
++# results in an ambiguity. ast.c makes sure it's a NAME.

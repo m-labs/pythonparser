@@ -17,14 +17,14 @@ class Token:
     in the source code.
 
     :ivar loc: (:class:`pyparser.source.Range`) token location
-    :ivar kind: (string) token kind; interned (can be compared using ``is``)
+    :ivar kind: (string) token kind
     :ivar value: token value; None or a kind-specific class
     """
     def __init__(self, loc, kind, value=None):
         self.loc, self.kind, self.value = loc, kind, value
 
     def __repr__(self):
-        return "Token(%s, %s, %s)" % (repr(self.loc), self.kind, repr(self.value))
+        return "Token(%s, \"%s\", %s)" % (repr(self.loc), self.kind, repr(self.value))
 
 class Lexer:
     """
@@ -191,7 +191,7 @@ class Lexer:
 
     _lex_check_byte_re = re.compile("[^\x00-\x7f]")
 
-    def next(self):
+    def next(self, eof_token=False):
         """
         Returns token at ``offset`` as a :class:`Token` and advances ``offset``
         to point past the end of the token, where the token has:
@@ -200,20 +200,25 @@ class Lexer:
           the token but not surrounding whitespace,
         - *kind* which is a string containing one of Python keywords or operators,
           ``newline``, ``float``, ``int``, ``complex``, ``strbegin``,
-          ``strdata``, ``strend``, ``ident``, ``indent`` or ``dedent``,
+          ``strdata``, ``strend``, ``ident``, ``indent``, ``dedent`` or ``eof``
+          (if ``eof_token`` is True).
         - *value* which is the flags as lowercase string if *kind* is ``strbegin``,
           the string contents if *kind* is ``strdata``,
           the numeric value if *kind* is ``float``, ``int`` or ``complex``,
           the identifier if *kind* is ``ident`` and ``None`` in any other case.
         """
         if len(self.queue) == 0:
-            self._refill()
+            self._refill(eof_token)
 
         return self.queue.pop(0)
 
-    def _refill(self):
+    def _refill(self, eof_token):
         if self.offset == len(self.source_buffer.source):
-            raise StopIteration
+            if eof_token:
+                self.queue.append(Token(
+                    source.Range(self.source_buffer, self.offset, self.offset), 'eof'))
+            else:
+                raise StopIteration
 
         # We need separate next and _refill because lexing can sometimes
         # generate several tokens, e.g. INDENT
@@ -262,13 +267,13 @@ class Lexer:
         if match.group(3) is not None: # newline
             if len(self.parentheses) + len(self.square_braces) + len(self.curly_braces) > 0:
                 # 2.1.6 Implicit line joining
-                return self._refill()
+                return self._refill(eof_token)
             if match.group(2) is not None:
                 # 2.1.5. Explicit line joining
-                return self._refill()
+                return self._refill(eof_token)
             if self.new_line:
                 # 2.1.7. Blank lines
-                return self._refill()
+                return self._refill(eof_token)
 
             self.new_line = True
             self.queue.append(Token(tok_range, "newline"))
@@ -279,7 +284,7 @@ class Lexer:
 
         if match.group(4) is not None: # comment
             self.comments.append((tok_range, match.group(4)))
-            self._refill()
+            self._refill(eof_token)
 
         elif match.group(5) is not None: # floating point or complex literal
             if match.group(6) is None:

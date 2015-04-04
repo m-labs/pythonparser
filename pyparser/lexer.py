@@ -11,6 +11,21 @@ import sys
 if sys.version_info[0] == 3:
     unichr = chr
 
+class Token:
+    """
+    The :class:`Token` encapsulates a single lexer token and its location
+    in the source code.
+
+    :ivar loc: (:class:`pyparser.source.Range`) token location
+    :ivar kind: (string) token kind; interned (can be compared using ``is``)
+    :ivar value: token value; None or a kind-specific class
+    """
+    def __init__(self, loc, kind, value=None):
+        self.loc, self.kind, self.value = loc, kind, value
+
+    def __repr__(self):
+        return "Token(%s, %s, %s)" % (repr(self.loc), self.kind, repr(self.value))
+
 class Lexer:
     """
     The :class:`Lexer` class extracts tokens and comments from
@@ -178,19 +193,18 @@ class Lexer:
 
     def next(self):
         """
-        Returns token at ``offset`` as a tuple (*range*, *token*, *data*)
-        and advances ``offset`` to point past the end of the token,
-        where:
+        Returns token at ``offset`` as a :class:`Token` and advances ``offset``
+        to point past the end of the token, where the token has:
 
-        - *range* is a :class:`pyparser.source.Range` that includes
+        - *range* which is a :class:`pyparser.source.Range` that includes
           the token but not surrounding whitespace,
-        - *token* is a string containing one of Python keywords or operators,
+        - *kind* which is a string containing one of Python keywords or operators,
           ``newline``, ``float``, ``int``, ``complex``, ``strbegin``,
           ``strdata``, ``strend``, ``ident``, ``indent`` or ``dedent``,
-        - *data* is the flags as lowercase string if *token* is ``strbegin``,
-          the string contents if *token* is ``strdata``,
-          the numeric value if *token* is ``float``, ``int`` or ``complex``,
-          the identifier if *token* is ``ident`` and ``None`` in any other case.
+        - *value* which is the flags as lowercase string if *kind* is ``strbegin``,
+          the string contents if *kind* is ``strdata``,
+          the numeric value if *kind* is ``float``, ``int`` or ``complex``,
+          the identifier if *kind* is ``ident`` and ``None`` in any other case.
         """
         if len(self.queue) == 0:
             self._refill()
@@ -218,7 +232,7 @@ class Lexer:
             range = source.Range(self.source_buffer, match.start(1), match.start(1))
             if level > self.indent[-1][0]:
                 self.indent.append((level, range, whitespace))
-                self.queue.append((range, 'indent', None))
+                self.queue.append(Token(range, 'indent'))
             elif level < self.indent[-1][0]:
                 exact = False
                 while level <= self.indent[-1][0]:
@@ -226,7 +240,7 @@ class Lexer:
                         exact = True
                         break
                     self.indent.pop(-1)
-                    self.queue.append((range, 'dedent', None))
+                    self.queue.append(Token(range, 'dedent'))
                 if not exact:
                     note = diagnostic.Diagnostic(
                         "note", "expected to match level here", {},
@@ -257,7 +271,7 @@ class Lexer:
                 return self._refill()
 
             self.new_line = True
-            self.queue.append((tok_range, "newline", None))
+            self.queue.append(Token(tok_range, "newline"))
             return
 
         # Lexing non-whitespace now.
@@ -269,32 +283,32 @@ class Lexer:
 
         elif match.group(5) is not None: # floating point or complex literal
             if match.group(6) is None:
-                self.queue.append((tok_range, "float", float(match.group(5))))
+                self.queue.append(Token(tok_range, "float", float(match.group(5))))
             else:
-                self.queue.append((tok_range, "complex", float(match.group(5)) * 1j))
+                self.queue.append(Token(tok_range, "complex", float(match.group(5)) * 1j))
 
         elif match.group(7) is not None: # complex literal
-            self.queue.append((tok_range, "complex", int(match.group(7)) * 1j))
+            self.queue.append(Token(tok_range, "complex", int(match.group(7)) * 1j))
 
         elif match.group(8) is not None: # integer literal, dec
             literal = match.group(8)
             self._check_long_literal(tok_range, match.group(1))
-            self.queue.append((tok_range, "int", int(literal)))
+            self.queue.append(Token(tok_range, "int", int(literal)))
 
         elif match.group(9) is not None: # integer literal, oct
             literal = match.group(9)
             self._check_long_literal(tok_range, match.group(1))
-            self.queue.append((tok_range, "int", int(literal, 8)))
+            self.queue.append(Token(tok_range, "int", int(literal, 8)))
 
         elif match.group(10) is not None: # integer literal, hex
             literal = match.group(10)
             self._check_long_literal(tok_range, match.group(1))
-            self.queue.append((tok_range, "int", int(literal, 16)))
+            self.queue.append(Token(tok_range, "int", int(literal, 16)))
 
         elif match.group(11) is not None: # integer literal, bin
             literal = match.group(11)
             self._check_long_literal(tok_range, match.group(1))
-            self.queue.append((tok_range, "int", int(literal, 2)))
+            self.queue.append(Token(tok_range, "int", int(literal, 2)))
 
         elif match.group(12) is not None: # integer literal, bare oct
             literal = match.group(12)
@@ -303,7 +317,7 @@ class Lexer:
                     "error", "in Python 3, decimal literals must not start with a zero", {},
                     source.Range(self.source_buffer, tok_range.begin_pos, tok_range.begin_pos + 1))
                 raise diagnostic.DiagnosticException(error)
-            self.queue.append((tok_range, "int", int(literal, 8)))
+            self.queue.append(Token(tok_range, "int", int(literal, 8)))
 
         elif match.group(14) is not None: # long string literal
             self._string_literal(
@@ -326,10 +340,10 @@ class Lexer:
         elif match.group(21) is not None: # keywords and operators
             kwop = match.group(21)
             self._match_pair_delim(tok_range, kwop)
-            self.queue.append((tok_range, kwop, None))
+            self.queue.append(Token(tok_range, kwop))
 
         elif match.group(22) is not None: # identifier
-            self.queue.append((tok_range, "ident", match.group(22)))
+            self.queue.append(Token(tok_range, "ident", match.group(22)))
 
         elif match.group(23) is not None: # Unicode identifier
             if self.version < (3, 0):
@@ -337,10 +351,10 @@ class Lexer:
                     "error", "in Python 2, Unicode identifiers are not allowed", {},
                     tok_range)
                 raise diagnostic.DiagnosticException(error)
-            self.queue.append((tok_range, "ident", match.group(23)))
+            self.queue.append(Token(tok_range, "ident", match.group(23)))
 
         elif match.group(24) is not None: # end-of-file
-            self.queue.append((tok_range, "eof", None))
+            self.queue.append(Token(tok_range, "eof"))
 
         else:
             assert False
@@ -357,11 +371,11 @@ class Lexer:
                 begin_range)
             raise diagnostic.DiagnosticException(error)
 
-        self.queue.append((begin_range, 'strbegin', options))
-        self.queue.append((data_range,
+        self.queue.append(Token(begin_range, 'strbegin', options))
+        self.queue.append(Token(data_range,
                           'strdata', self._replace_escape(data_range, options, data)))
-        self.queue.append((source.Range(self.source_buffer, *end_span),
-                          'strend', None))
+        self.queue.append(Token(source.Range(self.source_buffer, *end_span),
+                          'strend'))
 
     def _replace_escape(self, range, mode, value):
         is_raw     = ("r" in mode)

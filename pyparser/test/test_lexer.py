@@ -11,13 +11,13 @@ class LexerTestCase(unittest.TestCase):
             tokens = expected_tokens
             self.buffer = source.Buffer(input)
             self.lexer = lexer.Lexer(self.buffer, version)
-            for (range, token, data) in self.lexer:
+            for token in self.lexer:
                 if len(tokens) < 2:
-                    raise Exception("stray tokens: %s" % ((token,data),))
-                expected_token, expected_data = tokens[:2]
+                    raise Exception("stray tokens: %s" % repr(token))
+                expected_kind, expected_value = tokens[:2]
                 tokens = tokens[2:]
-                self.assertEqual(expected_token, token)
-                self.assertEqual(expected_data, data)
+                self.assertEqual(expected_kind, token.kind)
+                self.assertEqual(expected_value, token.value)
             self.assertEqual((), tokens)
 
     def assertDiagnosesVersions(self, input, versions, diag, *tokens):

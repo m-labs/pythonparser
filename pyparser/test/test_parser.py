@@ -21,11 +21,11 @@ class ParserTestCase(unittest.TestCase):
         return self.parser
 
     def assertParses(self, ast, code):
-        self.assertEqual(ast, self.parser_for(code).expr())
+        self.assertEqual(ast, self.parser_for(code).eval_input())
 
     def assertDiagnoses(self, code, diag):
         try:
-            self.parser_for(code).expr()
+            self.parser_for(code).eval_input()
             self.fail("Expected a diagnostic")
         except diagnostic.DiagnosticException as e:
             level, reason, args, loc = diag
@@ -42,10 +42,6 @@ class ParserTestCase(unittest.TestCase):
         self.assertDiagnoses(code,
             ("error", "unexpected {actual}: expected {expected}", {'actual': err_token}, loc))
 
-    def test_int(self):
-        self.assertParses(1, "1")
-        self.assertParses(1.0, "1.0")
-        self.assertParses(1.0, "(1.0)")
-        self.assertParses(1.0, "((1.0))")
-        self.assertDiagnosesUnexpected("()", ")", (1, 2))
+    def test_pass(self):
+        self.assertParses(None, "pass")
 

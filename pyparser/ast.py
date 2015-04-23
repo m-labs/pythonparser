@@ -75,11 +75,13 @@ class arguments(commonloc):
     Function definition arguments, e.g. in ``def f(x, y=1, *z, **t)``.
 
     :ivar args: (list of assignable node) regular formal arguments
-    :ivar vararg: (node) splat formal argument (if any), e.g. in ``*x``
-    :ivar kwarg: (node) keyword splat formal argument (if any), e.g. in ``**x``
-    :ivar defaults: (node) values of default arguments
+    :ivar vararg: (string) splat formal argument (if any), e.g. in ``*x``
+    :ivar kwarg: (string) keyword splat formal argument (if any), e.g. in ``**x``
+    :ivar defaults: (list of node) values of default arguments
     :ivar star_loc: location of ``*``, if any
+    :ivar vararg_loc: location of splat formal argument, if any
     :ivar dstar_loc: location of ``**``, if any
+    :ivar kwarg_loc: location of keyword splat formal argument, if any
     :ivar default_equals_locs: locations of ``=``
     """
 
@@ -132,13 +134,14 @@ class ExceptHandler(excepthandler, ast.ExceptHandler):
     """
     An exception handler, e.g. ``except x as y:·  z``.
 
-    :ivar type: (node) type of handled exception
+    :ivar type: (node) type of handled exception, if any
     :ivar name: (assignable node) variable bound to exception, if any
     :ivar body: (list of node) code to execute when exception is caught
     :ivar except_loc: location of ``except``
     :ivar as_loc: location of ``as``, if any
+    :ivar colon_loc: location of ``:``
     """
-    _locs = excepthandler._locs + ('except_loc', 'as_loc')
+    _locs = excepthandler._locs + ('except_loc', 'as_loc', 'colon_loc')
 
 class expr(commonloc):
     """Base class for expression nodes."""
@@ -328,7 +331,6 @@ class keyword(commonloc, ast.keyword):
 
 class mod(commonloc):
     """Base class for modules (groups of statements)."""
-    _locs = commonloc._locs + ('body',)
 class Expression(mod, ast.Expression):
     """A group of statements parsed as if for :func:`eval`."""
 class Interactive(mod, ast.Interactive):
@@ -435,8 +437,9 @@ class ClassDef(keywordloc, stmt, ast.ClassDef):
     :ivar name_loc: location of name
     :ivar lparen_loc: location of ``(``, if any
     :ivar rparen_loc: location of ``)``, if any
+    :ivar at_locs: locations of decorator ``@``
     """
-    _locs = keywordloc._locs + ('name_loc', 'lparen_loc', 'rparen_loc')
+    _locs = keywordloc._locs + ('name_loc', 'lparen_loc', 'rparen_loc', 'at_loc')
 class Continue(keywordloc, stmt, ast.Continue):
     """The ``continue`` statement."""
 class Delete(keywordloc, stmt, ast.Delete):
@@ -488,8 +491,9 @@ class FunctionDef(keywordloc, stmt, ast.FunctionDef):
     :ivar decorator_list: (list of node) decorators
     :ivar name_loc: location of name
     :ivar colon_loc: location of ``:``, if any
+    :ivar at_locs: locations of decorator ``@``
     """
-    _locs = keywordloc._locs + ('keyword_loc' 'name_loc', 'colon_loc')
+    _locs = keywordloc._locs + ('keyword_loc' 'name_loc', 'colon_loc', 'at_loc')
 class Global(keywordloc, stmt, ast.Global):
     """
     The ``global x, y`` statement.
@@ -516,17 +520,17 @@ class Import(keywordloc, stmt, ast.Import):
     """
 class ImportFrom(keywordloc, stmt, ast.Import):
     """
-    The ``from ...x import y, z`` statement.
+    The ``from ...x import y, z`` or ``from x import *`` statement.
 
     :ivar names: (list of :class:`alias`) names
-    :ivar module: (string) module name
+    :ivar module: (string) module name, if any
     :ivar level: (integer) amount of dots before module name
     :ivar keyword_loc: location of ``from``
-    :ivar dots_loc: location of dots
-    :ivar module_loc: location of module name
+    :ivar dots_loc: location of dots, if any
+    :ivar module_loc: location of module name, if any
     :ivar import_loc: location of ``import``
     """
-    _locs = keywordloc._locs + ('dots_loc', 'module_loc', 'import_loc')
+    _locs = keywordloc._locs + ('module_loc', 'import_loc')
 class Pass(keywordloc, stmt, ast.Pass):
     """The ``pass`` statement."""
 class Print(keywordloc, stmt, ast.Print):
@@ -554,7 +558,7 @@ class TryExcept(keywordloc, stmt, ast.TryExcept):
     The ``try:·  x·except y:·  z·else:·  t`` statement.
 
     :ivar body: (list of node) code to try
-    :ivar handlers:
+    :ivar handlers: (list of :class:`ExceptHandler`) exception handlers
     :ivar orelse: (list of node) code if no exception
     :ivar keyword_loc: location of ``try``
     :ivar try_colon_loc: location of ``:`` after ``try``

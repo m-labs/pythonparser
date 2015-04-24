@@ -63,14 +63,17 @@ def report(parser, name='parser'):
         pts = len(rule.covered)
         covered = len(filter(lambda x: x, rule.covered))
         if covered == 0:
-            klass = 'uncovered'
+            klass, hint = 'uncovered', None
         elif covered < pts:
-            klass = 'partial'
+            klass, hint = 'partial', ', '.join(map(lambda x: "yes" if x else "no", rule.covered))
         else:
-            klass = 'covered'
+            klass, hint = 'covered', None
 
         loc = source.Range(_buf, *rule.loc)
-        rewriter.insert_before(loc, r"<span class='%s'>" % klass)
+        if hint:
+            rewriter.insert_before(loc, r"<span class='%s' title='%s'>" % (klass, hint))
+        else:
+            rewriter.insert_before(loc, r"<span class='%s'>" % klass)
         rewriter.insert_after(loc, r"</span>")
 
         total_pts += pts
@@ -92,7 +95,10 @@ def report(parser, name='parser'):
         <title>{percentage:.2f}%: {file} coverage report</title>
         <style type="text/css">
         .uncovered {{ background-color: #FFCAAD; }}
-        .partial {{ background-color: #FFFFB4; }}
+        .partial {{
+            background-color: #FFFFB4;
+            border-bottom: 1px dotted black;
+        }}
         .covered {{ background-color: #9CE4B7; }}
         pre {{ counter-reset: line; }}
         .line::before {{

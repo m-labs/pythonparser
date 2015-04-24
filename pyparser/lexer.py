@@ -219,6 +219,8 @@ class Lexer:
 
         return self.queue[-1]
 
+    # We need separate next and _refill because lexing can sometimes
+    # generate several tokens, e.g. INDENT
     def _refill(self, eof_token):
         if self.offset == len(self.source_buffer.source):
             if eof_token:
@@ -227,8 +229,6 @@ class Lexer:
             else:
                 raise StopIteration
 
-        # We need separate next and _refill because lexing can sometimes
-        # generate several tokens, e.g. INDENT
         match = self._lex_token_re.match(self.source_buffer.source, self.offset)
         if match is None:
             diag = diagnostic.Diagnostic(
@@ -239,7 +239,7 @@ class Lexer:
 
         # Should we emit indent/dedent?
         if self.new_line and \
-                match.group(3) is None: # not a newline
+                match.group(3) is None: # not a blank line
             whitespace = match.string[match.start(0):match.start(1)]
             level = len(whitespace.expandtabs())
             range = source.Range(self.source_buffer, match.start(1), match.start(1))

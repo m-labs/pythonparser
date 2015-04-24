@@ -169,3 +169,66 @@ class Range:
         Inverse of :meth:`__eq__`.
         """
         return not (self == other)
+
+class RewriterConflict(Exception):
+    """
+    An exception that is raised when two ranges supplied to a rewriter overlap.
+
+    :ivar first: (:class:`Range`) first overlapping range
+    :ivar second: (:class:`Range`) second overlapping range
+    """
+
+    def __init__(self, first, second):
+        self.first, self.second = first, second
+        exception.__init__(self, "Ranges %s and %s overlap" % (repr(first), repr(second)))
+
+class Rewriter:
+    """
+    The :class:`Rewriter` class rewrites source code: performs bulk modification
+    guided by a list of ranges and  code fragments replacing their original
+    content.
+
+    :ivar buffer: (:class:`Buffer`) buffer
+    """
+
+    def __init__(self, buffer):
+        self.buffer = buffer
+        self.ranges = []
+
+    def replace(self, range, replacement):
+        """Remove `range` and replace it with string `replacement`."""
+        self.ranges.append((range, replacement))
+
+    def remove(self, range):
+        """Remove `range`."""
+        self.replace(self, range, "")
+
+    def insert_before(self, range, text):
+        """Insert `text` before `range`."""
+        self.replace(self, range.begin(), "")
+
+    def insert_after(self, range, text):
+        """Insert `text` after `range`."""
+        self.replace(self, range.end(), "")
+
+    def rewrite(self):
+        """Return the rewritten source. May raise :class:`RewriterConflict`."""
+        self._sort()
+        self._check()
+
+        rewritten, pos = [], 0
+        for range, replacement in self.ranges:
+            rewritten.append(self.buffer.source[pos:range.begin_pos])
+            rewritten.append(replacement)
+            pos = range.end_pos
+        rewritten.append(self.buffer.source[pos:])
+
+        return Buffer(''.join(rewritten), self.buffer.name, self.buffer.first_line)
+
+    def _sort(self):
+        self.ranges.sort(key=lambda x: x[0].begin_pos)
+
+    def _check(self):
+        for (fst, _), (snd, _) in zip(self.ranges, self.ranges[1:]):
+            if snd.begin_pos < fst.end_pos:
+                raise RewriterConflict(fst, snd)

@@ -1,7 +1,7 @@
 # coding:utf-8
 
 from __future__ import absolute_import, division, print_function, unicode_literals
-from .. import source, lexer, diagnostic, coverage
+from .. import source, lexer, diagnostic, ast, coverage
 from ..coverage import parser
 import unittest
 
@@ -10,9 +10,11 @@ def tearDownModule():
 
 class ParserTestCase(unittest.TestCase):
 
-    def parser_for(self, code):
+    def parser_for(self, code, version=(2, 6)):
+        code = code.replace("·", "\n")
+
         self.source_buffer = source.Buffer(code)
-        self.lexer = lexer.Lexer(self.source_buffer, (2,7))
+        self.lexer = lexer.Lexer(self.source_buffer, version)
         self.parser = parser.Parser(self.lexer)
 
         old_next = self.lexer.next
@@ -24,8 +26,33 @@ class ParserTestCase(unittest.TestCase):
 
         return self.parser
 
-    def assertParses(self, ast, code):
-        self.assertEqual(ast, self.parser_for(code).file_input())
+    def flatten_ast(self, node):
+        # Validate locs
+        for attr in node.__dict__:
+            if attr.endswith('_loc') or attr.endswith('_locs'):
+                self.assertTrue(attr in node._locs)
+        for loc in node._locs:
+            self.assertTrue(loc in node.__dict__)
+
+        flat_node = { 'ty': unicode(type(node).__name__) }
+        for field in node._fields:
+            value = getattr(node, field)
+            if isinstance(value, ast.AST):
+                value = self.flatten_ast(value)
+            if isinstance(value, list) and len(value) > 0 and isinstance(value[0], ast.AST):
+                value = map(self.flatten_ast, value)
+            flat_node[unicode(field)] = value
+        return flat_node
+
+    def assertParses(self, expected_flat_ast, code, loc_matchers=""):
+        ast = self.parser_for(code + "\n").file_input()
+        flat_ast = self.flatten_ast(ast)
+        self.assertEqual({'ty': 'Module', 'body': expected_flat_ast},
+                         flat_ast)
+
+    def assertParsesExpr(self, expected_flat_ast, code, loc_matchers=""):
+        self.assertParses([{'ty': 'Expr', 'value': expected_flat_ast}],
+                          code, loc_matchers)
 
     def assertDiagnoses(self, code, diag):
         try:
@@ -46,6 +73,9 @@ class ParserTestCase(unittest.TestCase):
         self.assertDiagnoses(code,
             ("error", "unexpected {actual}: expected {expected}", {'actual': err_token}, loc))
 
-    def test_pass(self):
-        self.assertParses(None, "pass\n")
+    def test_int(self):
+        self.assertParsesExpr(
+            {'ty': 'Num', 'n': 1},
+            "1",
+            "^ loc")
 

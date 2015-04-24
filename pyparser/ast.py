@@ -13,6 +13,7 @@ or None. All attributes ending with ``_locs`` contain lists of instances of
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 from .shim import ast
+from .shim.ast import AST
 
 class commonloc(object):
     """

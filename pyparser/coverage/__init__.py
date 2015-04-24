@@ -76,7 +76,7 @@ def report(parser, name='parser'):
         total_pts += pts
         total_covered += covered
 
-    print("GRAMMAR COVERAGE: %.2f" % (total_covered / total_pts))
+    print("GRAMMAR COVERAGE: %.2f%%" % (total_covered / total_pts))
 
     content = rewriter.rewrite().source
     content = '\n'.join(map(

@@ -321,10 +321,11 @@ class Parser:
         return ast.Interactive(body=body, loc=loc)
 
     @action(SeqN(0, Star(Alt(Newline(), Rule('stmt'))), Tok('eof')))
-    def file_input(parser, stmts):
+    def file_input(parser, body):
         """file_input: (NEWLINE | stmt)* ENDMARKER"""
+        body = reduce(list.__add__, body, [])
         loc = None if body == [] else body[0].loc
-        return ast.Module(body=reduce(list.__add__, stmts, []), loc=loc)
+        return ast.Module(body=body, loc=loc)
 
     @action(SeqN(0, Rule('testlist'), Star(Tok('newline')), Tok('eof')))
     def eval_input(self, expr):

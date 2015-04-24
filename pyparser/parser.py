@@ -840,7 +840,8 @@ class Parser:
     @action(Seq(Tok('strbegin'), Tok('strdata'), Tok('strend')))
     def atom_3(self, begin_tok, data_tok, end_tok):
         return ast.Str(s=data_tok.value,
-                       begin_loc=begin_tok.loc, end_loc=end_tok.loc)
+                       begin_loc=begin_tok.loc, end_loc=end_tok.loc,
+                       loc=begin_tok.loc.join(end_tok.loc))
 
     @action(Rule('testlist1'))
     def atom_4(self, expr):

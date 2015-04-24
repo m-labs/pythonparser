@@ -3,7 +3,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 from .. import source, lexer, diagnostic, ast, coverage
 from ..coverage import parser
-import unittest
+import unittest, re
 
 def tearDownModule():
     coverage.report(parser)
@@ -44,15 +44,60 @@ class ParserTestCase(unittest.TestCase):
             flat_node[unicode(field)] = value
         return flat_node
 
-    def assertParses(self, expected_flat_ast, code, loc_matchers=""):
+    _loc_re  = re.compile(r"\s*([~^]+)\s+([a-z_0-9.]+)")
+    _path_re = re.compile(r"(([a-z_]+)|([0-9]+))(.)?")
+
+    def match_loc(self, ast, matcher, root=lambda x: x):
+        ast = root(ast)
+
+        matcher_pos = 0
+        while matcher_pos < len(matcher):
+            matcher_match = self._loc_re.match(matcher, matcher_pos)
+            if matcher_match is None:
+                raise Exception("invalid location matcher %s" % matcher[matcher_pos:])
+
+            range = source.Range(self.source_buffer,
+                matcher_match.start(1) - matcher_pos,
+                matcher_match.end(1) - matcher_pos)
+            path = matcher_match.group(2)
+
+            path_pos = 0
+            obj = ast
+            while path_pos < len(path):
+                path_match = self._path_re.match(path, path_pos)
+                if path_match is None:
+                    raise Exception("invalid location matcher path %s" % path)
+
+                path_field = path_match.group(1)
+                path_index = path_match.group(2)
+                path_last  = not path_match.group(3)
+
+                if path_field is not None:
+                    obj = getattr(obj, path_field)
+                elif path_index is not None:
+                    obj = obj[int(path_index)]
+
+                if path_last:
+                    self.assertEqual(obj, range)
+
+                path_pos = path_match.end(0)
+
+            matcher_pos = matcher_match.end(0)
+
+    def assertParsesGen(self, expected_flat_ast, code):
         ast = self.parser_for(code + "\n").file_input()
         flat_ast = self.flatten_ast(ast)
         self.assertEqual({'ty': 'Module', 'body': expected_flat_ast},
                          flat_ast)
+        return ast
 
-    def assertParsesExpr(self, expected_flat_ast, code, loc_matchers=""):
-        self.assertParses([{'ty': 'Expr', 'value': expected_flat_ast}],
-                          code, loc_matchers)
+    def assertParsesSuite(self, expected_flat_ast, code, loc_matcher=""):
+        ast = self.assertParsesGen(expected_flat_ast, code)
+        self.match_loc(ast, loc_matcher, lambda x: x.body)
+
+    def assertParsesExpr(self, expected_flat_ast, code, loc_matcher=""):
+        ast = self.assertParsesGen([{'ty': 'Expr', 'value': expected_flat_ast}], code)
+        self.match_loc(ast, loc_matcher, lambda x: x.body[0].value)
 
     def assertDiagnoses(self, code, diag):
         try:
@@ -73,9 +118,33 @@ class ParserTestCase(unittest.TestCase):
         self.assertDiagnoses(code,
             ("error", "unexpected {actual}: expected {expected}", {'actual': err_token}, loc))
 
+    #
+    # LITERALS
+    #
+
     def test_int(self):
         self.assertParsesExpr(
             {'ty': 'Num', 'n': 1},
             "1",
             "^ loc")
+
+    def test_float(self):
+        self.assertParsesExpr(
+            {'ty': 'Num', 'n': 1.0},
+            "1.0",
+            "~~~ loc")
+
+    def test_complex(self):
+        self.assertParsesExpr(
+            {'ty': 'Num', 'n': 1j},
+            "1j",
+            "~~ loc")
+
+    def test_string(self):
+        self.assertParsesExpr(
+            {'ty': 'Str', 's': 'foo'},
+            "'foo'",
+            "~~~~~ loc"
+            "^ begin_loc"
+            "    ^ end_loc")
 

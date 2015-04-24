@@ -201,15 +201,15 @@ class Rewriter:
 
     def remove(self, range):
         """Remove `range`."""
-        self.replace(self, range, "")
+        self.replace(range, "")
 
     def insert_before(self, range, text):
         """Insert `text` before `range`."""
-        self.replace(self, range.begin(), "")
+        self.replace(range.begin(), text)
 
     def insert_after(self, range, text):
         """Insert `text` after `range`."""
-        self.replace(self, range.end(), "")
+        self.replace(range.end(), text)
 
     def rewrite(self):
         """Return the rewritten source. May raise :class:`RewriterConflict`."""

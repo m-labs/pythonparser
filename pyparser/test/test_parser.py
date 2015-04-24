@@ -1,8 +1,12 @@
 # coding:utf-8
 
 from __future__ import absolute_import, division, print_function, unicode_literals
-from .. import source, lexer, diagnostic, parser
+from .. import source, lexer, diagnostic, coverage
+from ..coverage import parser
 import unittest
+
+def tearDownModule():
+    coverage.report(parser)
 
 class ParserTestCase(unittest.TestCase):
 
@@ -21,11 +25,11 @@ class ParserTestCase(unittest.TestCase):
         return self.parser
 
     def assertParses(self, ast, code):
-        self.assertEqual(ast, self.parser_for(code).eval_input())
+        self.assertEqual(ast, self.parser_for(code).file_input())
 
     def assertDiagnoses(self, code, diag):
         try:
-            self.parser_for(code).eval_input()
+            self.parser_for(code).file_input()
             self.fail("Expected a diagnostic")
         except diagnostic.DiagnosticException as e:
             level, reason, args, loc = diag
@@ -43,5 +47,5 @@ class ParserTestCase(unittest.TestCase):
             ("error", "unexpected {actual}: expected {expected}", {'actual': err_token}, loc))
 
     def test_pass(self):
-        self.assertParses(None, "pass")
+        self.assertParses(None, "pass\n")
 

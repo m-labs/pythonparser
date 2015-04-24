@@ -4,3 +4,5 @@ _build/
 *.egg-info/
 /build/
 /dist/
+/pyparser/coverage/parser.py
+/doc/coverage/*

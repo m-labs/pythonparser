@@ -1,14 +1,42 @@
 """
-The :mod:`parser` module concerns itself with LL(1) parsing.
+The :mod:`parser` module concerns itself with parsing Python source.
 """
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 from . import source, diagnostic, lexer, ast
 
 # Generic LL parsing combinators
-unmatched = object()
+class Unmatched:
+    def __repr__(self):
+        return "<can't parse>"
+unmatched = Unmatched()
 
-def action(inner_rule):
+_all_rules = []
+
+def llrule(loc, expected, cases=1):
+    if loc is None:
+        def decorator(rule):
+            rule.expected = expected
+            return rule
+    else:
+        def decorator(inner_rule):
+            if cases == 1:
+                def rule(*args, **kwargs):
+                    result = inner_rule(*args, **kwargs)
+                    if result is not unmatched:
+                        rule.covered[0] = True
+                    return result
+            else:
+                rule = inner_rule
+
+            rule.loc, rule.expected, rule.covered = \
+                loc, expected, [False] * cases
+            _all_rules.append(rule)
+
+            return rule
+    return decorator
+
+def action(inner_rule, loc=None):
     """
     A decorator returning a function that first runs ``inner_rule`` and then, if its
     return value is not None, maps that value using ``mapper``.
@@ -18,6 +46,7 @@ def action(inner_rule):
     Similar to attaching semantic actions to rules in traditional parser generators.
     """
     def decorator(mapper):
+        @llrule(loc, inner_rule.expected)
         def outer_rule(parser):
             result = inner_rule(parser)
             if isinstance(result, tuple):
@@ -25,43 +54,43 @@ def action(inner_rule):
             elif result is not unmatched:
                 result = mapper(parser, result)
             return result
-        outer_rule.expected = inner_rule.expected
         return outer_rule
     return decorator
 
-def Eps(value=None):
+def Eps(value=None, loc=None):
     """A rule that accepts no tokens (epsilon) and returns ``value``."""
+    @llrule(loc, lambda parser: [])
     def rule(parser):
         return value
-    rule.expected = lambda parser: [[]]
     return rule
 
-def Tok(kind):
+def Tok(kind, loc=None):
     """A rule that accepts a token of kind ``kind`` and returns it, or returns None."""
+    @llrule(loc, lambda parser: [kind])
     def rule(parser):
         return parser._accept(kind)
-    rule.expected = lambda parser: [[kind]]
     return rule
 
-def Loc(kind):
+def Loc(kind, loc=None):
     """A rule that accepts a token of kind ``kind`` and returns its location, or returns None."""
+    @llrule(loc, lambda parser: [kind])
     def rule(parser):
         result = parser._accept(kind)
         if result is not unmatched:
             return result.loc
         return unmatched
-    rule.expected = lambda parser: [[kind]]
     return rule
 
-def Rule(name):
+def Rule(name, loc=None):
     """A proxy for a rule called ``name`` which may not be yet defined."""
+    @llrule(loc, lambda parser: getattr(parser, name).expected(parser))
     def rule(parser):
         return getattr(parser, name)()
-    rule.expected = lambda parser: getattr(parser, name).expected(parser)
     return rule
 
-def Expect(inner_rule):
+def Expect(inner_rule, loc=None):
     """A rule that executes ``inner_rule`` and emits a diagnostic error if it returns None."""
+    @llrule(loc, inner_rule.expected)
     def rule(parser):
         result = inner_rule(parser)
         if result is unmatched:
@@ -78,61 +107,69 @@ def Expect(inner_rule):
                 parser.token.loc)
             raise diagnostic.DiagnosticException(error)
         return result
-    rule.expected = inner_rule.expected
     return rule
 
-def Seq(first_rule, *rest_of_rules):
+def Seq(first_rule, *rest_of_rules, **kwargs):
     """
     A rule that accepts a sequence of tokens satisfying ``rules`` and returns a tuple
     containing their return values, or None if the first rule was not satisfied.
     """
     rest_of_rules = map(Expect, rest_of_rules)
+    @llrule(kwargs.get('loc', None), first_rule.expected)
     def rule(parser):
         first_result = first_rule(parser)
         if first_result is not unmatched:
             return tuple([first_result]) + tuple(map(lambda rule: rule(parser), rest_of_rules))
         return unmatched
-    rule.expected = \
-        lambda parser: first_rule.expected(parser) + \
-                       reduce(list.__add__, map(lambda rule: rule.expected(parser), rest_of_rules))
     return rule
 
-def SeqN(n, *inner_rules):
+def SeqN(n, *inner_rules, **kwargs):
     """
     A rule that accepts a sequence of tokens satisfying ``rules`` and returns
     the value returned by rule number ``n``, or None if the first rule was not satisfied.
     """
-    @action(Seq(*inner_rules))
+    @action(Seq(*inner_rules), loc=kwargs.get('loc', None))
     def rule(parser, *values):
         return values[n]
     return rule
 
-def Alt(*inner_rules):
+def Alt(*inner_rules, **kwargs):
     """
     A rule that expects a sequence of tokens satisfying one of ``rules`` in sequence
     (a rule is satisfied when it returns anything but None) and returns the return
     value of that rule, or None if no rules were satisfied.
     """
-    def rule(parser):
-        # semantically reduce(), but faster.
-        for inner_rule in inner_rules:
-            result = inner_rule(parser)
-            if result is not unmatched:
-                return result
-        return unmatched
-    rule.expected = \
-        lambda parser: reduce(list.__add__, map(lambda x: x.expected(parser), inner_rules))
+    loc = kwargs.get('loc', None)
+    expected = lambda parser: reduce(list.__add__, map(lambda x: x.expected(parser), inner_rules))
+    if loc is not None:
+        @llrule(loc, expected, cases=len(inner_rules))
+        def rule(parser):
+            for idx, inner_rule in enumerate(inner_rules):
+                result = inner_rule(parser)
+                if result is not unmatched:
+                    rule.covered[idx] = True
+                    return result
+            return unmatched
+    else:
+        @llrule(loc, expected, cases=len(inner_rules))
+        def rule(parser):
+            for inner_rule in inner_rules:
+                result = inner_rule(parser)
+                if result is not unmatched:
+                    return result
+            return unmatched
     return rule
 
-def Opt(inner_rule):
+def Opt(inner_rule, loc=None):
     """Shorthand for ``Alt(inner_rule, Eps())``"""
-    return Alt(inner_rule, Eps())
+    return Alt(inner_rule, Eps(), loc=loc)
 
-def Star(inner_rule):
+def Star(inner_rule, loc=None):
     """
     A rule that accepts a sequence of tokens satisfying ``inner_rule`` zero or more times,
     and returns the returned values in a :class:`list`.
     """
+    @llrule(loc, lambda parser: [])
     def rule(parser):
         results = []
         while True:
@@ -140,14 +177,14 @@ def Star(inner_rule):
             if result is unmatched:
                 return results
             results.append(result)
-    rule.expected = lambda parser: []
     return rule
 
-def Plus(inner_rule):
+def Plus(inner_rule, loc=None):
     """
     A rule that accepts a sequence of tokens satisfying ``inner_rule`` one or more times,
     and returns the returned values in a :class:`list`.
     """
+    @llrule(loc, inner_rule.expected)
     def rule(parser):
         result = inner_rule(parser)
         if result is unmatched:
@@ -159,21 +196,21 @@ def Plus(inner_rule):
             if result is unmatched:
                 return results
             results.append(result)
-    rule.expected = inner_rule.expected
     return rule
 
-def List(inner_rule, separator_tok, trailing, leading=True):
+def List(inner_rule, separator_tok, trailing, leading=True, loc=None):
     if not trailing:
-        @action(Seq(inner_rule, Star(SeqN(1, Tok(separator_tok), inner_rule))))
-        def rule(parser, first, rest):
+        @action(Seq(inner_rule, Star(SeqN(1, Tok(separator_tok), inner_rule))), loc=loc)
+        def outer_rule(parser, first, rest):
             return [first] + rest
-        return rule
+        return outer_rule
     else:
         # A rule like this: stmt (';' stmt)* [';']
         # This doesn't yield itself to combinators above, because disambiguating
         # another iteration of the Kleene star and the trailing separator
         # requires two lookahead tokens (naively).
         separator_rule = Tok(separator_tok)
+        @llrule(loc, inner_rule.expected)
         def rule(parser):
             results = []
 
@@ -196,32 +233,31 @@ def List(inner_rule, separator_tok, trailing, leading=True):
                     return results
                 else:
                     results.append(result)
-        rule.expected = inner_rule.expected
         return rule
 
 # Python AST specific parser combinators
-def Newline():
+def Newline(loc=None):
     """A rule that accepts token of kind ``newline`` and returns []."""
+    @llrule(loc, lambda parser: ['newline'])
     def rule(parser):
         if parser._accept('newline') is not unmatched:
             return []
         return unmatched
-    rule.expected = lambda parser: [['newline']]
     return rule
 
-def Oper(klass, *kinds):
+def Oper(klass, *kinds, **kwargs):
     """
     A rule that accepts a sequence of tokens of kinds ``kinds`` and returns
     an instance of ``klass`` with ``loc`` encompassing the entire sequence
     or None if the first token is not of ``kinds[0]``.
     """
-    @action(Seq(*map(Loc, kinds)))
+    @action(Seq(*map(Loc, kinds)), loc=kwargs.get('loc', None))
     def rule(parser, *tokens):
         return klass(loc=tokens[0].join(tokens[-1]))
     return rule
 
-def BinOper(expr_rulename, op_rule, node=ast.BinOp):
-    @action(Seq(Rule(expr_rulename), Star(Seq(op_rule, Rule(expr_rulename)))))
+def BinOper(expr_rulename, op_rule, node=ast.BinOp, loc=None):
+    @action(Seq(Rule(expr_rulename), Star(Seq(op_rule, Rule(expr_rulename)))), loc=loc)
     def rule(parser, lhs, trailers):
         for (op, rhs) in trailers:
             lhs = node(left=lhs, op=op, right=rhs,
@@ -229,8 +265,8 @@ def BinOper(expr_rulename, op_rule, node=ast.BinOp):
         return lhs
     return rule
 
-def BeginEnd(begin_tok, inner_rule, end_tok, empty=None):
-    @action(Seq(Loc(begin_tok), inner_rule, Loc(end_tok)))
+def BeginEnd(begin_tok, inner_rule, end_tok, empty=None, loc=None):
+    @action(Seq(Loc(begin_tok), inner_rule, Loc(end_tok)), loc=loc)
     def rule(parser, begin_loc, node, end_loc):
         if node is None:
             node = empty()
@@ -333,7 +369,7 @@ class Parser:
                              dstar_loc=dstar_loc, kwarg_loc=kwarg_tok.loc)
 
     @action(Seq(Loc('*'), Tok('ident'),
-                Opt(Seq(Loc('**', Tok('ident'))))))
+                Opt(Seq(Loc('**'), Tok('ident')))))
     def varargslist_2(self, star_loc, vararg_tok, kwarg_opt):
         dstar_loc, kwarg, kwarg_loc = None
         if kwarg_opt:

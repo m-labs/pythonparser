@@ -212,6 +212,13 @@ class Lexer:
 
         return self.queue.pop(0)
 
+    def peek(self, eof_token=False):
+        """Same as :meth:`next`, except the token is not dequeued."""
+        if len(self.queue) == 0:
+            self._refill(eof_token)
+
+        return self.queue[-1]
+
     def _refill(self, eof_token):
         if self.offset == len(self.source_buffer.source):
             if eof_token:
@@ -231,7 +238,8 @@ class Lexer:
             raise diagnostic.DiagnosticException(diag)
 
         # Should we emit indent/dedent?
-        if self.new_line:
+        if self.new_line and \
+                match.group(3) is None: # not a newline
             whitespace = match.string[match.start(0):match.start(1)]
             level = len(whitespace.expandtabs())
             range = source.Range(self.source_buffer, match.start(1), match.start(1))

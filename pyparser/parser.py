@@ -414,7 +414,7 @@ class Parser:
     def expr_stmt_2(self, seq):
         if len(seq) > 0:
             return ast.Assign(targets=map(lambda x: x[1], seq[:-1]), value=seq[-1][1],
-                              ops_loc=map(lambda x: x[0], seq))
+                              op_locs=map(lambda x: x[0], seq))
         else:
             return None
 
@@ -423,18 +423,18 @@ class Parser:
         """expr_stmt: testlist (augassign (yield_expr|testlist) |
                                 ('=' (yield_expr|testlist))*)"""
         if isinstance(rhs, ast.AugAssign):
-            if len(lhs.elts) == 1:
-                rhs.target = self._assignable(lhs.elts[0])
-                rhs.loc = rhs.target.loc.join(rhs.value.loc)
-                return rhs
-            else:
+            if isinstance(lhs, ast.Tuple):
                 error = diagnostic.Diagnostic(
                     "error", "illegal expression for augmented assignment", {}, rhs.loc)
                 raise diagnostic.DiagnosticException(error)
+            else:
+                rhs.target = self._assignable(lhs)
+                rhs.loc = rhs.target.loc.join(rhs.value.loc)
+                return rhs
         elif rhs is not None:
             rhs.targets = map(self._assignable, [lhs] + rhs.targets)
             rhs.loc = lhs.loc.join(rhs.value.loc)
-            return ast.Expr(value=rhs, loc=rhs.loc)
+            return rhs
         else:
             return ast.Expr(value=lhs, loc=lhs.loc)
 
@@ -754,11 +754,27 @@ class Parser:
     test = Alt(test_1, Rule('lambdef'))
     """test: or_test ['if' or_test 'else' test] | lambdef"""
 
-    or_test = BinOper('and_test', Oper(ast.Or, 'or'), node=ast.BoolOp)
-    """or_test: and_test ('or' and_test)*"""
+    @action(Seq(Rule('and_test'), Star(Seq(Loc('or'), Rule('and_test')))))
+    def or_test(self, lhs, rhs):
+        """or_test: and_test ('or' and_test)*"""
+        if len(rhs) > 0:
+            return ast.BoolOp(op=ast.Or(),
+                              values=[lhs] + map(lambda x: x[1], rhs),
+                              loc=lhs.loc.join(rhs[-1][1].loc),
+                              op_locs=map(lambda x: x[0], rhs))
+        else:
+            return lhs
 
-    and_test = BinOper('not_test', Oper(ast.And, 'and'), node=ast.BoolOp)
-    """and_test: not_test ('and' not_test)*"""
+    @action(Seq(Rule('not_test'), Star(Seq(Loc('and'), Rule('not_test')))))
+    def and_test(self, lhs, rhs):
+        """and_test: not_test ('and' not_test)*"""
+        if len(rhs) > 0:
+            return ast.BoolOp(op=ast.And(),
+                              values=[lhs] + map(lambda x: x[1], rhs),
+                              loc=lhs.loc.join(rhs[-1][1].loc),
+                              op_locs=map(lambda x: x[0], rhs))
+        else:
+            return lhs
 
     @action(Seq(Oper(ast.Not, 'not'), Rule('not_test')))
     def not_test_1(self, op, operand):
@@ -779,7 +795,7 @@ class Parser:
             return lhs
 
     comp_op = Alt(Oper(ast.Lt, '<'), Oper(ast.Gt, '>'), Oper(ast.Eq, '=='),
-                  Oper(ast.GtE, '>='), Oper(ast.GtE, '<='), Oper(ast.NotEq, '<>'),
+                  Oper(ast.GtE, '>='), Oper(ast.LtE, '<='), Oper(ast.NotEq, '<>'),
                   Oper(ast.NotEq, '!='),
                   Oper(ast.In, 'in'), Oper(ast.NotIn, 'not', 'in'),
                   Oper(ast.Is, 'is'), Oper(ast.IsNot, 'is', 'not'))

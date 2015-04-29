@@ -86,8 +86,15 @@ class arguments(commonloc):
     :ivar default_equals_locs: locations of ``=``
     """
 
-class boolop(commonloc):
-    """Base class for binary boolean operators."""
+class boolop:
+    """
+    Base class for binary boolean operators.
+
+    This class is unlike others in that it does not have the ``loc`` field.
+    It serves only as an indicator of operation and corresponds to no source
+    itself; locations are recorded in :class:`BoolOp`.
+    """
+    _locs = ()
 class And(boolop, ast.And):
     """The ``and`` operator."""
 class Or(boolop, ast.Or):
@@ -168,7 +175,9 @@ class BoolOp(expr, ast.BoolOp):
     :ivar left: (node) left-hand side
     :ivar op: (:class:`boolop`) operator
     :ivar right: (node) right-hand side
+    :ivar op_locs: locations of operators
     """
+    _locs = expr._locs + ('op_locs',)
 class Call(beginendloc, expr, ast.Call):
     """
     A function call, e.g. ``f(x, y=1, *z, **t)``.
@@ -414,8 +423,9 @@ class Assign(stmt, ast.Assign):
 
     :ivar targets: (list of assignable node) left-hand sides
     :ivar value: (node) right-hand side
-    :ivar ops_loc: location of equality signs corresponding to ``targets``
+    :ivar op_locs: location of equality signs corresponding to ``targets``
     """
+    _locs = stmt._locs + ('op_locs',)
 class AugAssign(stmt, ast.AugAssign):
     """
     The operator-assignment statement, e.g. ``+=``.

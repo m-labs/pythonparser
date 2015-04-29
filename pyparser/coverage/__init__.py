@@ -79,7 +79,7 @@ def report(parser, name='parser'):
         total_pts += pts
         total_covered += covered
 
-    print("GRAMMAR COVERAGE: %.2f%%" % (total_covered / total_pts))
+    print("GRAMMAR COVERAGE: %.2f%%" % (total_covered / total_pts * 100))
 
     content = rewriter.rewrite().source
     content = '\n'.join(map(
@@ -117,7 +117,7 @@ def report(parser, name='parser'):
     <pre>{content}</pre>
 </body>
 </html>
-""".format(percentage=total_covered / total_pts,
+""".format(percentage=total_covered / total_pts * 100,
            pts=total_pts, covered=total_covered,
            file=os.path.basename(_buf.name),
            content=content))

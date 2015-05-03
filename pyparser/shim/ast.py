@@ -7,7 +7,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from ast import *
 import sys
 
-if sys.version <= (2, 6):
+if sys.version_info <= (2, 6):
     class DictComp(expr):
         _fields = ('key', 'value', 'generators')
 

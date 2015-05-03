@@ -115,7 +115,7 @@ def Seq(first_rule, *rest_of_rules, **kwargs):
     A rule that accepts a sequence of tokens satisfying ``rules`` and returns a tuple
     containing their return values, or None if the first rule was not satisfied.
     """
-    rest_of_rules = map(Expect, rest_of_rules)
+    rest_of_rules = list(map(Expect, rest_of_rules))
     @llrule(kwargs.get('loc', None), first_rule.expected)
     def rule(parser):
         first_result = first_rule(parser)
@@ -351,8 +351,8 @@ class Parser:
     @action(Seq(Rule('decorators'), Alt(Rule('classdef'), Rule('funcdef'))))
     def decorated(self, decorators, classfuncdef):
         """decorated: decorators (classdef | funcdef)"""
-        classfuncdef.at_locs = map(lambda x: x[0], decorators)
-        classfuncdef.decorator_list = map(lambda x: x[0], decorators)
+        classfuncdef.at_locs = list(map(lambda x: x[0], decorators))
+        classfuncdef.decorator_list = list(map(lambda x: x[0], decorators))
         return classfuncdef
 
     @action(Seq(Loc('def'), Tok('ident'), Rule('parameters'), Loc(':'), Rule('suite')))
@@ -414,8 +414,8 @@ class Parser:
     @action(Star(Seq(Loc('='), Alt(Rule('yield_expr'), Rule('testlist')))))
     def expr_stmt_2(self, seq):
         if len(seq) > 0:
-            return ast.Assign(targets=map(lambda x: x[1], seq[:-1]), value=seq[-1][1],
-                              op_locs=map(lambda x: x[0], seq))
+            return ast.Assign(targets=list(map(lambda x: x[1], seq[:-1])), value=seq[-1][1],
+                              op_locs=list(map(lambda x: x[0], seq)))
         else:
             return None
 
@@ -433,7 +433,7 @@ class Parser:
                 rhs.loc = rhs.target.loc.join(rhs.value.loc)
                 return rhs
         elif rhs is not None:
-            rhs.targets = map(self._assignable, [lhs] + rhs.targets)
+            rhs.targets = list(map(self._assignable, [lhs] + rhs.targets))
             rhs.loc = lhs.loc.join(rhs.value.loc)
             return rhs
         else:
@@ -469,7 +469,7 @@ class Parser:
     @action(Seq(Loc('del'), Rule('exprlist')))
     def del_stmt(self, stmt_loc, exprs):
         """del_stmt: 'del' exprlist"""
-        return ast.Delete(targets=map(self._assignable, exprs),
+        return ast.Delete(targets=list(map(self._assignable, exprs)),
                           loc=stmt_loc.join(exprs.loc), keyword_loc=stmt_loc)
 
     @action(Loc('pass'))
@@ -581,12 +581,12 @@ class Parser:
     def dotted_name(self, idents):
         """dotted_name: NAME ('.' NAME)*"""
         return idents[0].loc.join(idents[-1].loc), \
-               '.'.join(map(lambda x: x.value, idents))
+               '.'.join(list(map(lambda x: x.value, idents)))
 
     @action(Seq(Loc('global'), List(Tok('ident'), ',', trailing=False)))
     def global_stmt(self, keyword_loc, names):
         """global_stmt: 'global' NAME (',' NAME)*"""
-        return ast.Global(names=map(ast.Name, names),
+        return ast.Global(names=list(map(ast.Name, names)),
                           keyword_loc=keyword_loc)
 
     @action(Seq(Loc('exec'), Rule('expr'),
@@ -760,9 +760,9 @@ class Parser:
         """or_test: and_test ('or' and_test)*"""
         if len(rhs) > 0:
             return ast.BoolOp(op=ast.Or(),
-                              values=[lhs] + map(lambda x: x[1], rhs),
+                              values=[lhs] + list(map(lambda x: x[1], rhs)),
                               loc=lhs.loc.join(rhs[-1][1].loc),
-                              op_locs=map(lambda x: x[0], rhs))
+                              op_locs=list(map(lambda x: x[0], rhs)))
         else:
             return lhs
 
@@ -771,9 +771,9 @@ class Parser:
         """and_test: not_test ('and' not_test)*"""
         if len(rhs) > 0:
             return ast.BoolOp(op=ast.And(),
-                              values=[lhs] + map(lambda x: x[1], rhs),
+                              values=[lhs] + list(map(lambda x: x[1], rhs)),
                               loc=lhs.loc.join(rhs[-1][1].loc),
-                              op_locs=map(lambda x: x[0], rhs))
+                              op_locs=list(map(lambda x: x[0], rhs)))
         else:
             return lhs
 
@@ -789,8 +789,8 @@ class Parser:
     def comparison(self, lhs, rhs):
         """comparison: expr (comp_op expr)*"""
         if len(rhs) > 0:
-            return ast.Compare(left=lhs, ops=map(lambda x: x[0], rhs),
-                               comparators=map(lambda x: x[1], rhs),
+            return ast.Compare(left=lhs, ops=list(map(lambda x: x[0], rhs)),
+                               comparators=list(map(lambda x: x[1], rhs)),
                                loc=lhs.loc.join(rhs[-1][1].loc))
         else:
             return lhs
@@ -1004,9 +1004,9 @@ class Parser:
     @action(List(Seq(Rule('test'), Loc(':'), Rule('test')), ',', trailing=True))
     def dictmaker(self, elts):
         """dictmaker: test ':' test (',' test ':' test)* [',']"""
-        return ast.Dict(keys=map(lambda x: x[0], elts),
-                        values=map(lambda x: x[2], elts),
-                        colon_locs=map(lambda x: x[1], elts))
+        return ast.Dict(keys=list(map(lambda x: x[0], elts)),
+                        values=list(map(lambda x: x[2], elts)),
+                        colon_locs=list(map(lambda x: x[1], elts)))
 
     @action(Seq(Loc('class'), Tok('ident'),
                 Opt(BeginEnd('(', Rule('testlist'), ')')),

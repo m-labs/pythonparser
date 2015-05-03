@@ -3,6 +3,7 @@ The :mod:`parser` module concerns itself with parsing Python source.
 """
 
 from __future__ import absolute_import, division, print_function, unicode_literals
+from functools import reduce
 from . import source, diagnostic, lexer, ast
 
 # Generic LL parsing combinators

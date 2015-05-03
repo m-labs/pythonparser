@@ -3,7 +3,10 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 from .. import source, lexer, diagnostic, ast, coverage
 from ..coverage import parser
-import unittest, re
+import unittest, sys, re
+
+if sys.version_info >= (3,):
+    def unicode(x): return x
 
 def tearDownModule():
     coverage.report(parser)
@@ -41,7 +44,7 @@ class ParserTestCase(unittest.TestCase):
             if isinstance(value, ast.AST):
                 value = self.flatten_ast(value)
             if isinstance(value, list) and len(value) > 0 and isinstance(value[0], ast.AST):
-                value = map(self.flatten_ast, value)
+                value = list(map(self.flatten_ast, value))
             flat_node[unicode(field)] = value
         return flat_node
 

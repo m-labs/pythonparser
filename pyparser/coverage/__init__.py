@@ -61,7 +61,7 @@ def report(parser, name='parser'):
     total_covered = 0
     for rule in parser._all_rules:
         pts = len(rule.covered)
-        covered = len(filter(lambda x: x, rule.covered))
+        covered = len(list(filter(lambda x: x, rule.covered)))
         if covered == 0:
             klass, hint = 'uncovered', None
         elif covered < pts:

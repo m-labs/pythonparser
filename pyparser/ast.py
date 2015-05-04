@@ -160,6 +160,7 @@ class Attribute(expr, ast.Attribute):
     :ivar value: (node) left-hand side
     :ivar attr: (string) attribute name
     """
+    _locs = expr._locs + ('dot_loc', 'attr_loc')
 class BinOp(expr, ast.BinOp):
     """
     A binary operation, e.g. ``x + y``.
@@ -316,10 +317,11 @@ class UnaryOp(expr, ast.UnaryOp):
     """
 class Yield(expr, ast.Yield):
     """
-    A yield expression, e.g. ``yield x``.
+    A yield expression, e.g. ``(yield x)``.
 
     :ivar value: (node) yielded value
     """
+    _locs = expr._locs + ('keyword_loc',)
 
 # expr_context
 #     AugLoad
@@ -337,7 +339,7 @@ class keyword(commonloc, ast.keyword):
     :ivar value: (node) value
     :ivar equals_loc: location of ``=``
     """
-    _locs = commonloc._locs + ('equals_loc',)
+    _locs = commonloc._locs + ('arg_loc', 'equals_loc')
 
 class mod(commonloc):
     """Base class for modules (groups of statements)."""

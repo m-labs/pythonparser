@@ -29,6 +29,9 @@ def instrument():
         if not in_grammar:
             continue
 
+        if token.kind == '.': # skip ast.List
+            lex.next()
+
         if token.kind == 'ident' and \
                 token.value in ('action', 'Eps', 'Tok', 'Loc', 'Rule', 'Expect',
                                 'Seq', 'SeqN', 'Alt', 'Opt', 'Star', 'Plus', 'List',

@@ -13,6 +13,8 @@ def tearDownModule():
 
 class ParserTestCase(unittest.TestCase):
 
+    maxDiff = None
+
     def parser_for(self, code, version=(2, 6)):
         code = code.replace("·", "\n")
 
@@ -36,7 +38,8 @@ class ParserTestCase(unittest.TestCase):
                 self.assertTrue(attr in node._locs,
                                 "%s not in %s._locs" % (attr, repr(node)))
         for loc in node._locs:
-            self.assertTrue(loc in node.__dict__)
+            self.assertTrue(loc in node.__dict__,
+                            "%s not in %s._locs" % (loc, repr(node)))
 
         flat_node = { 'ty': unicode(type(node).__name__) }
         for field in node._fields:
@@ -122,6 +125,17 @@ class ParserTestCase(unittest.TestCase):
         self.assertDiagnoses(code,
             ("error", "unexpected {actual}: expected {expected}", {'actual': err_token}, loc))
 
+    # Fixtures
+
+    ast_1 = {'ty': 'Num', 'n': 1}
+    ast_2 = {'ty': 'Num', 'n': 2}
+    ast_3 = {'ty': 'Num', 'n': 3}
+
+    ast_x = {'ty': 'Name', 'id': 'x', 'ctx': None}
+    ast_y = {'ty': 'Name', 'id': 'y', 'ctx': None}
+    ast_z = {'ty': 'Name', 'id': 'z', 'ctx': None}
+    ast_t = {'ty': 'Name', 'id': 't', 'ctx': None}
+
     #
     # LITERALS
     #
@@ -161,8 +175,6 @@ class ParserTestCase(unittest.TestCase):
     #
     # OPERATORS
     #
-
-    ast_1 = {'ty': 'Num', 'n': 1}
 
     def test_unary(self):
         self.assertParsesExpr(
@@ -373,11 +385,276 @@ class ParserTestCase(unittest.TestCase):
             "       ~~ op_locs.1")
 
     #
-    # STATEMENTS
+    # COMPOUND LITERALS
     #
 
-    ast_x = {'ty': 'Name', 'id': 'x', 'ctx': None}
-    ast_y = {'ty': 'Name', 'id': 'y', 'ctx': None}
+    def test_tuple(self):
+        self.assertParsesExpr(
+            {'ty': 'Tuple', 'elts': [], 'ctx': None},
+            "()",
+            "^ begin_loc"
+            " ^ end_loc"
+            "~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Tuple', 'elts': [self.ast_1], 'ctx': None},
+            "(1,)",
+            "~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Tuple', 'elts': [self.ast_1, self.ast_1], 'ctx': None},
+            "(1,1)",
+            "~~~~~ loc")
+
+        self.assertParsesExpr(
+            self.ast_1,
+            "(1)",
+            " ~ loc")
+
+    def test_list(self):
+        self.assertParsesExpr(
+            {'ty': 'List', 'elts': [], 'ctx': None},
+            "[]",
+            "^ begin_loc"
+            " ^ end_loc"
+            "~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'List', 'elts': [self.ast_1], 'ctx': None},
+            "[1]",
+            "~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'List', 'elts': [self.ast_1, self.ast_1], 'ctx': None},
+            "[1,1]",
+            "~~~~~ loc")
+
+    def test_dict(self):
+        self.assertParsesExpr(
+            {'ty': 'Dict', 'keys': [], 'values': []},
+            "{}",
+            "^ begin_loc"
+            " ^ end_loc"
+            "~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Dict', 'keys': [self.ast_x], 'values': [self.ast_1]},
+            "{x: 1}",
+            "^ begin_loc"
+            "     ^ end_loc"
+            "  ^ colon_locs.0"
+            "~~~~~~ loc")
+
+    def test_repr(self):
+        self.assertParsesExpr(
+            {'ty': 'Repr', 'value': self.ast_1},
+            "`1`",
+            "^ begin_loc"
+            "  ^ end_loc"
+            "~~~ loc")
+
+    #
+    # GENERATOR AND CONDITIONAL EXPRESSIONS
+    #
+
+    def test_list_comp(self):
+        self.assertParsesExpr(
+            {'ty': 'ListComp', 'elt': self.ast_x, 'generators': [
+                {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y, 'ifs': []}
+            ]},
+            "[x for y in z]",
+            "^ begin_loc"
+            "   ~~~ generators.0.for_loc"
+            "         ~~ generators.0.in_loc"
+            "   ~~~~~~~~~~ generators.0.loc"
+            "             ^ end_loc"
+            "~~~~~~~~~~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'ListComp', 'elt': self.ast_x, 'generators': [
+                {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y,
+                 'ifs': [self.ast_t]}
+            ]},
+            "[x for y in z if t]",
+            "              ~~ generators.0.if_locs.0"
+            "   ~~~~~~~~~~~~~~~ generators.0.loc"
+            "~~~~~~~~~~~~~~~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'ListComp', 'elt': self.ast_x, 'generators': [
+                {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y,
+                 'ifs': [self.ast_x]},
+                {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_t, 'ifs': []}
+            ]},
+            "[x for y in z if x for t in z]",
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ loc")
+
+    def test_gen_comp(self):
+        self.assertParsesExpr(
+            {'ty': 'GeneratorExp', 'elt': self.ast_x, 'generators': [
+                {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y, 'ifs': []}
+            ]},
+            "(x for y in z)",
+            "^ begin_loc"
+            "   ~~~ generators.0.for_loc"
+            "         ~~ generators.0.in_loc"
+            "   ~~~~~~~~~~ generators.0.loc"
+            "             ^ end_loc"
+            "~~~~~~~~~~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'GeneratorExp', 'elt': self.ast_x, 'generators': [
+                {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y,
+                 'ifs': [self.ast_t]}
+            ]},
+            "(x for y in z if t)",
+            "              ~~ generators.0.if_locs.0"
+            "   ~~~~~~~~~~~~~~~ generators.0.loc"
+            "~~~~~~~~~~~~~~~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'GeneratorExp', 'elt': self.ast_x, 'generators': [
+                {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y,
+                 'ifs': [self.ast_x]},
+                {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_t, 'ifs': []}
+            ]},
+            "(x for y in z if x for t in z)",
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ loc")
+
+    def test_yield_expr(self):
+        self.assertParsesExpr(
+            {'ty': 'Yield', 'value': self.ast_1},
+            "(yield 1)",
+            " ~~~~~ keyword_loc"
+            " ~~~~~~~ loc")
+
+    def test_if_expr(self):
+        self.assertParsesExpr(
+            {'ty': 'IfExp', 'body': self.ast_x, 'test': self.ast_y, 'orelse': self.ast_z},
+            "x if y else z",
+            "  ~~ if_loc"
+            "       ~~~~ else_loc"
+            "~~~~~~~~~~~~~ loc")
+
+    #
+    # CALLS, ATTRIBUTES AND SUBSCRIPTS
+    #
+
+    def test_call(self):
+        self.assertParsesExpr(
+            {'ty': 'Call', 'func': self.ast_x, 'starargs': None, 'kwargs': None,
+             'args': [], 'keywords': []},
+            "x()",
+            " ^ begin_loc"
+            "  ^ end_loc"
+            "~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Call', 'func': self.ast_x, 'starargs': None, 'kwargs': None,
+             'args': [self.ast_y], 'keywords': [
+                { 'ty': 'keyword', 'arg': 'z', 'value': self.ast_z}
+            ]},
+            "x(y, z=z)",
+            "     ^ keywords.0.arg_loc"
+            "      ^ keywords.0.equals_loc"
+            "     ~~~ keywords.0.loc"
+            "~~~~~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Call', 'func': self.ast_x, 'starargs': self.ast_y, 'kwargs': None,
+             'args': [], 'keywords': []},
+            "x(*y)",
+            "  ^ star_loc"
+            "~~~~~ loc")
+
+        # self.assertParsesExpr(
+        #     {'ty': 'Call', 'func': self.ast_x, 'starargs': self.ast_y, 'kwargs': self.ast_z,
+        #      'args': [], 'keywords': []},
+        #     "x(*y, **z)",
+        #     "  ^ star_loc"
+        #     "      ^^ dstar_loc"
+        #     "~~~~~~~~~~ loc")
+
+        # self.assertParsesExpr(
+        #     {'ty': 'Call', 'func': self.ast_x, 'starargs': self.ast_y, 'kwargs': self.ast_z,
+        #      'args': [self.ast_t], 'keywords': []},
+        #     "x(*y, t, **z)",
+        #     "  ^ star_loc"
+        #     "         ^^ dstar_loc"
+        #     "~~~~~~~~~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Call', 'func': self.ast_x, 'starargs': None, 'kwargs': self.ast_z,
+             'args': [], 'keywords': []},
+            "x(**z)",
+            "  ^^ dstar_loc"
+            "~~~~~~ loc")
+
+    def test_subscript(self):
+        self.assertParsesExpr(
+            {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
+             'slice': {'ty': 'Index', 'value': self.ast_1}},
+            "x[1]",
+            " ^ begin_loc"
+            "  ^ slice.loc"
+            "   ^ end_loc"
+            "~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
+             'slice': {'ty': 'ExtSlice', 'dims': [
+                {'ty': 'Index', 'value': self.ast_1},
+                {'ty': 'Index', 'value': self.ast_2},
+             ]}},
+            "x[1, 2]",
+            "  ~~~~ slice.loc"
+            "~~~~~~~ loc")
+
+        # self.assertParsesExpr(
+        #     {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
+        #      'slice': {'ty': 'Slice', 'lower': self.ast_1, 'upper': None, 'step': None}},
+        #     "x[:1]",
+        #     "  ^ slice.bound_colon_loc"
+        #     "  ~~ slice.loc"
+        #     "~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
+             'slice': {'ty': 'Slice', 'lower': self.ast_1, 'upper': self.ast_2, 'step': None}},
+            "x[1:2]",
+            "   ^ slice.bound_colon_loc"
+            "  ~~~ slice.loc"
+            "~~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
+             'slice': {'ty': 'Slice', 'lower': self.ast_1, 'upper': self.ast_2, 'step': None}},
+            "x[1:2:]",
+            "   ^ slice.bound_colon_loc"
+            "     ^ slice.step_colon_loc"
+            "  ~~~~ slice.loc"
+            "~~~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
+             'slice': {'ty': 'Slice', 'lower': self.ast_1, 'upper': self.ast_2, 'step': self.ast_3}},
+            "x[1:2:3]",
+            "   ^ slice.bound_colon_loc"
+            "     ^ slice.step_colon_loc"
+            "  ~~~~~ slice.loc"
+            "~~~~~~~~ loc")
+
+    def test_attribute(self):
+        self.assertParsesExpr(
+            {'ty': 'Attribute', 'value': self.ast_x, 'attr': 'zz', 'ctx': None},
+            "x.zz",
+            " ^ dot_loc"
+            "  ~~ attr_loc"
+            "~~~~ loc")
+
+    #
+    # STATEMENTS
+    #
 
     def test_assign(self):
         self.assertParsesSuite(

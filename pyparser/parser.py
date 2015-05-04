@@ -199,6 +199,9 @@ def Plus(inner_rule, loc=None):
             results.append(result)
     return rule
 
+class commalist(list):
+    __slots__ = ('trailing_comma',)
+
 def List(inner_rule, separator_tok, trailing, leading=True, loc=None):
     if not trailing:
         @action(Seq(inner_rule, Star(SeqN(1, Tok(separator_tok), inner_rule))), loc=loc)
@@ -213,7 +216,7 @@ def List(inner_rule, separator_tok, trailing, leading=True, loc=None):
         separator_rule = Tok(separator_tok)
         @llrule(loc, inner_rule.expected)
         def rule(parser):
-            results = []
+            results = commalist()
 
             if leading:
                 result = inner_rule(parser)
@@ -225,12 +228,12 @@ def List(inner_rule, separator_tok, trailing, leading=True, loc=None):
             while True:
                 result = separator_rule(parser)
                 if result is unmatched:
-                    #results.trailing = True
+                    results.trailing_comma = False
                     return results
 
                 result = inner_rule(parser)
                 if result is unmatched:
-                    #results.trailing = False
+                    results.trailing_comma = True
                     return results
                 else:
                     results.append(result)
@@ -271,9 +274,15 @@ def BeginEnd(begin_tok, inner_rule, end_tok, empty=None, loc=None):
     def rule(parser, begin_loc, node, end_loc):
         if node is None:
             node = empty()
-            node.ctx = None
-        node.begin_loc, node.end_loc, node.loc = \
-            begin_loc, end_loc, begin_loc.join(end_loc)
+
+        # Collection nodes don't have loc yet. If a node has loc at this
+        # point, it means it's an expression passed in parentheses.
+        if node.loc is None and type(node) in [
+                ast.List, ast.Dict, ast.Tuple, ast.Repr,
+                ast.ListComp, ast.GeneratorExp,
+                ast.Call, ast.Subscript]:
+            node.begin_loc, node.end_loc, node.loc = \
+                begin_loc, end_loc, begin_loc.join(end_loc)
         return node
     return rule
 
@@ -838,6 +847,7 @@ class Parser:
                 trailer.value = atom
             elif isinstance(trailer, ast.Call):
                 trailer.func = atom
+            trailer.loc = atom.loc.join(trailer.loc)
             atom = trailer
         if factor_opt:
             op_loc, factor = factor_opt
@@ -862,14 +872,15 @@ class Parser:
 
     @action(Rule('testlist1'))
     def atom_4(self, expr):
-        return ast.Repr(value=expr, loc=expr.loc)
+        return ast.Repr(value=expr, loc=None)
 
     atom = Alt(BeginEnd('(', Opt(Alt(Rule('yield_expr'), Rule('testlist_gexp'))), ')',
-                        empty=lambda: ast.Tuple(elts=[])),
+                        empty=lambda: ast.Tuple(elts=[], ctx=None, loc=None)),
                BeginEnd('[', Opt(Rule('listmaker')), ']',
-                        empty=lambda: ast.List(elts=[])),
+                        empty=lambda: ast.List(elts=[], ctx=None, loc=None)),
                BeginEnd('{', Opt(Rule('dictmaker')), '}',
-                        empty=lambda: ast.Dict(keys=[], values=[], colon_locs=[])),
+                        empty=lambda: ast.Dict(keys=[], values=[], colon_locs=[],
+                                               ctx=None, loc=None)),
                BeginEnd('`', atom_4, '`'),
                atom_1, atom_2, atom_3)
     """atom: ('(' [yield_expr|testlist_gexp] ')' |
@@ -890,11 +901,11 @@ class Parser:
 
     @action(Rule('list_for'))
     def listmaker_1(self, compose):
-        return ast.ListComp(generators=compose([]))
+        return ast.ListComp(generators=compose([]), loc=None)
 
     @action(List(Rule('test'), ',', trailing=True, leading=False))
     def listmaker_2(self, elts):
-        return ast.List(elts=elts, ctx=None)
+        return ast.List(elts=elts, ctx=None, loc=None)
 
     listmaker = action(
         Seq(Rule('test'),
@@ -904,14 +915,14 @@ class Parser:
 
     @action(Rule('gen_for'))
     def testlist_gexp_1(self, compose):
-        return ast.GeneratorExp(generators=compose([]))
+        return ast.GeneratorExp(generators=compose([]), loc=None)
 
-    @action(List(Rule('test'), ',', trailing=True))
+    @action(List(Rule('test'), ',', trailing=True, leading=False))
     def testlist_gexp_2(self, elts):
-        if elts == [] and not elts.trailing:
+        if elts == [] and not elts.trailing_comma:
             return None
         else:
-            return ast.Tuple(elts=elts, ctx=None)
+            return ast.Tuple(elts=elts, ctx=None, loc=None)
 
     testlist_gexp = action(
         Seq(Rule('test'), Alt(testlist_gexp_1, testlist_gexp_2))) \
@@ -929,7 +940,8 @@ class Parser:
     @action(Seq(Loc('.'), Tok('ident')))
     def trailer_1(self, dot_loc, ident_tok):
         return ast.Attribute(attr=ident_tok.value, ctx=None,
-                             loc=dot_loc.join(ident_tok.loc), dot_loc=dot_loc)
+                             loc=dot_loc.join(ident_tok.loc),
+                             attr_loc=ident_tok.loc, dot_loc=dot_loc)
 
     trailer = Alt(BeginEnd('(', Rule('arglist'), ')'),
                   BeginEnd('[', Rule('subscriptlist'), ']'),
@@ -940,11 +952,11 @@ class Parser:
     def subscriptlist(self, subscripts):
         """subscriptlist: subscript (',' subscript)* [',']"""
         if len(subscripts) == 1:
-            return ast.Subscript(slice=subscripts[0], ctx=None)
+            return ast.Subscript(slice=subscripts[0], ctx=None, loc=None)
         else:
             extslice = ast.ExtSlice(dims=subscripts,
                                     loc=subscripts[0].loc.join(subscripts[-1].loc))
-            return ast.Subscript(slice=extslice, ctx=None)
+            return ast.Subscript(slice=extslice, ctx=None, loc=None)
 
     @action(Seq(Loc('.'), Loc('.'), Loc('.')))
     def subscript_1(self, dot_1_loc, dot_2_loc, dot_3_loc):
@@ -970,6 +982,7 @@ class Parser:
                          loc=loc, bound_colon_loc=colon_loc, step_colon_loc=step_colon_loc)
 
     subscript_3_inner = Expect(Seq(Opt(Rule('test')), Opt(Rule('sliceop'))))
+
     def subscript(self):
         """subscript: '.' '.' '.' | test | [test] ':' [test] [sliceop]"""
         # This requires manual disambiguation of `test | [test] ...`
@@ -987,6 +1000,8 @@ class Parser:
 
         result_2 = self.subscript_3_inner()
         return self.subscript_3(result, result_1.loc, *result_2)
+    subscript.expected = \
+        lambda parser: parser.subscript_1.expected(parser) + parser.test.expected(parser)
 
     sliceop = Seq(Loc(':'), Opt(Rule('test')))
     """sliceop: ':' [test]"""
@@ -1006,7 +1021,8 @@ class Parser:
         """dictmaker: test ':' test (',' test ':' test)* [',']"""
         return ast.Dict(keys=list(map(lambda x: x[0], elts)),
                         values=list(map(lambda x: x[2], elts)),
-                        colon_locs=list(map(lambda x: x[1], elts)))
+                        colon_locs=list(map(lambda x: x[1], elts)),
+                        loc=None)
 
     @action(Seq(Loc('class'), Tok('ident'),
                 Opt(BeginEnd('(', Rule('testlist'), ')')),
@@ -1035,12 +1051,12 @@ class Parser:
                 raise diagnostic.DiagnosticException(error)
 
         return ast.Call(starargs=stararg, kwargs=kwarg, keywords=postargs,
-                        star_loc=star_loc, dstar_loc=dstar_loc)
+                        star_loc=star_loc, dstar_loc=dstar_loc, loc=None)
 
     @action(Seq(Loc('**'), Rule('test')))
     def arglist_2(self, dstar_loc, kwarg):
         return ast.Call(starargs=None, kwargs=kwarg, keywords=[],
-                        star_loc=None, dstar_loc=dstar_loc)
+                        star_loc=None, dstar_loc=dstar_loc, loc=None)
 
     arglist_3 = Alt(arglist_1, arglist_2)
 
@@ -1066,8 +1082,8 @@ class Parser:
 
         call = self.arglist_3()
         if call is unmatched:
-            call = ast.Call(args=args, keywords=keywords, starargs=[], kwargs=[],
-                            star_loc=None, dstar_loc=None)
+            call = ast.Call(args=args, keywords=keywords, starargs=None, kwargs=None,
+                            star_loc=None, dstar_loc=None, loc=None)
         else:
             call.args = args
             call.keywords = keywords + call.keywords
@@ -1106,7 +1122,8 @@ class Parser:
                     "error", "keyword must be an identifier", {}, lhs.loc)
                 raise diagnostic.DiagnosticException(error)
             return ast.keyword(arg=lhs.id, value=rhs,
-                               loc=lhs.loc.join(rhs.loc), equals_loc=equals_loc)
+                               loc=lhs.loc.join(rhs.loc),
+                               arg_loc=lhs.loc, equals_loc=equals_loc)
         else:
             return lhs
     argument.expected = test.expected

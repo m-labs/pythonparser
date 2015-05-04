@@ -15,12 +15,11 @@ class ParserTestCase(unittest.TestCase):
 
     maxDiff = None
 
-    def parser_for(self, code, version=(2, 6)):
+    def parser_for(self, code, version=(2, 6), interactive=False):
         code = code.replace("·", "\n")
 
         self.source_buffer = source.Buffer(code)
-        self.lexer = lexer.Lexer(self.source_buffer, version)
-        self.parser = parser.Parser(self.lexer)
+        self.lexer = lexer.Lexer(self.source_buffer, version, interactive=interactive)
 
         old_next = self.lexer.next
         def lexer_next(**args):
@@ -29,6 +28,7 @@ class ParserTestCase(unittest.TestCase):
             return token
         self.lexer.next = lexer_next
 
+        self.parser = parser.Parser(self.lexer)
         return self.parser
 
     def flatten_ast(self, node):
@@ -105,6 +105,11 @@ class ParserTestCase(unittest.TestCase):
     def assertParsesExpr(self, expected_flat_ast, code, loc_matcher=""):
         ast = self.assertParsesGen([{'ty': 'Expr', 'value': expected_flat_ast}], code)
         self.match_loc(ast, loc_matcher, lambda x: x.body[0].value)
+
+    def assertParsesToplevel(self, expected_flat_ast, code, loc_matcher, mode, interactive):
+        ast = getattr(self.parser_for(code, interactive=interactive), mode)()
+        self.assertEqual(expected_flat_ast, self.flatten_ast(ast))
+        self.match_loc(ast, loc_matcher, lambda x: x.body)
 
     def assertDiagnoses(self, code, diag):
         try:
@@ -743,3 +748,45 @@ class ParserTestCase(unittest.TestCase):
             "~~~~~~ 0.loc"
             "  ~~ 0.op.loc")
 
+    #
+    # PARSING MODES
+    #
+
+    def test_single_input(self):
+        self.assertParsesToplevel(
+            {'ty': 'Interactive', 'body': []},
+            "\n",
+            "",
+            mode='single_input', interactive=True)
+
+        self.assertParsesToplevel(
+            {'ty': 'Interactive', 'body': [
+                {'ty': 'Expr', 'value': self.ast_1}
+            ]},
+            "1\n",
+            "",
+            mode='single_input', interactive=True)
+
+        self.assertParsesToplevel(
+            {'ty': 'Interactive', 'body': [
+                {'ty': 'If', 'test': self.ast_x, 'body': [
+                    {'ty': 'Expr', 'value': self.ast_1}
+                ], 'orelse': []}
+            ]},
+            "if x: 1\n\n",
+            "",
+            mode='single_input', interactive=True)
+
+    def test_file_input(self):
+        self.assertParsesToplevel(
+            {'ty': 'Module', 'body': []},
+            "\n",
+            "",
+            mode='file_input', interactive=True)
+
+    def test_eval_input(self):
+        self.assertParsesToplevel(
+            {'ty': 'Expression', 'body': [self.ast_1]},
+            "1\n",
+            "",
+            mode='eval_input', interactive=True)

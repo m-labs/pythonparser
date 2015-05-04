@@ -615,16 +615,18 @@ class Parser:
         return ast.Assert(test=test, msg=msg,
                           keyword_loc=keyword_loc)
 
-    compound_stmt = Alt(Rule('if_stmt'), Rule('while_stmt'), Rule('for_stmt'),
-                        Rule('try_stmt'), Rule('with_stmt'), Rule('funcdef'),
-                        Rule('classdef'), Rule('decorated'))
-    """compound_stmt: if_stmt | while_stmt | for_stmt | try_stmt | with_stmt |
-                      funcdef | classdef | decorated"""
+    @action(Alt(Rule('if_stmt'), Rule('while_stmt'), Rule('for_stmt'),
+                Rule('try_stmt'), Rule('with_stmt'), Rule('funcdef'),
+                Rule('classdef'), Rule('decorated')))
+    def compound_stmt(self, stmt):
+        """compound_stmt: if_stmt | while_stmt | for_stmt | try_stmt | with_stmt |
+                          funcdef | classdef | decorated"""
+        return [stmt]
 
     @action(Seq(Loc('if'), Rule('test'), Loc(':'), Rule('suite'),
                 Star(Seq(Loc('elif'), Rule('test'), Loc(':'), Rule('suite'))),
                 Opt(Seq(Loc('else'), Loc(':'), Rule('suite')))))
-    def if_stmt(if_loc, test, if_colon_loc, body, elifs, else_opt):
+    def if_stmt(self, if_loc, test, if_colon_loc, body, elifs, else_opt):
         """if_stmt: 'if' test ':' suite ('elif' test ':' suite)* ['else' ':' suite]"""
         stmt = ast.If(orelse=[],
                       else_loc=None, else_colon_loc=None)
@@ -633,12 +635,16 @@ class Parser:
             stmt.else_loc, stmt.else_colon_loc, stmt.orelse = else_opt
 
         for elif_ in elifs:
-            stmt.if_loc, stmt.test, stmt.if_colon_loc, stmt.body = elif_
+            stmt.keyword_loc, stmt.test, stmt.if_colon_loc, stmt.body = elif_
+            stmt.loc = stmt.keyword_loc.join(stmt.body[-1].loc)
+            if stmt.orelse: stmt.loc = stmt.loc.join(stmt.orelse[-1])
             stmt = ast.If(orelse=[stmt],
                           else_loc=None, else_colon_loc=None)
 
-        stmt.if_loc, stmt.test, stmt.if_colon_loc, stmt.body = \
+        stmt.keyword_loc, stmt.test, stmt.if_colon_loc, stmt.body = \
             if_loc, test, if_colon_loc, body
+        stmt.loc = stmt.keyword_loc.join(stmt.body[-1].loc)
+        if stmt.orelse: stmt.loc = stmt.loc.join(stmt.orelse[-1])
         return stmt
 
     @action(Seq(Loc('while'), Rule('test'), Loc(':'), Rule('suite'),

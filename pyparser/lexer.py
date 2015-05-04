@@ -39,6 +39,8 @@ class Lexer:
         the source buffer
     :ivar offset: (integer) character offset into ``source_buffer``
         indicating where the next token will be recognized
+    :ivar interactive: (boolean) whether a completely empty line
+        should generate a NEWLINE token, for use in REPLs
     """
 
     _reserved_2_6 = frozenset([
@@ -91,9 +93,10 @@ class Lexer:
     :class:`frozenset`\s of string prefixes.
     """
 
-    def __init__(self, source_buffer, version):
+    def __init__(self, source_buffer, version, interactive=False):
         self.source_buffer = source_buffer
         self.version = version
+        self.interactive = interactive
 
         self.offset = 0
         self.new_line = True
@@ -223,11 +226,18 @@ class Lexer:
     # generate several tokens, e.g. INDENT
     def _refill(self, eof_token):
         if self.offset == len(self.source_buffer.source):
+            range = source.Range(self.source_buffer, self.offset, self.offset)
+
+            for i in self.indent[1:]:
+                self.indent.pop(-1)
+                self.queue.append(Token(range, 'dedent'))
+
             if eof_token:
-                self.queue.append(Token(
-                    source.Range(self.source_buffer, self.offset, self.offset), 'eof'))
-            else:
+                self.queue.append(Token(range, 'eof'))
+            elif len(self.queue) == 0:
                 raise StopIteration
+
+            return
 
         match = self._lex_token_re.match(self.source_buffer.source, self.offset)
         if match is None:
@@ -279,7 +289,8 @@ class Lexer:
             if match.group(2) is not None:
                 # 2.1.5. Explicit line joining
                 return self._refill(eof_token)
-            if self.new_line:
+            if self.new_line and not \
+                    (self.interactive and match.group(0) == match.group(3)): # REPL terminator
                 # 2.1.7. Blank lines
                 return self._refill(eof_token)
 
@@ -367,7 +378,8 @@ class Lexer:
             self.queue.append(Token(tok_range, "ident", match.group(23)))
 
         elif match.group(24) is not None: # end-of-file
-            self.queue.append(Token(tok_range, "eof"))
+            # Reuse the EOF logic
+            return self._refill(eof_token)
 
         else:
             assert False

@@ -6,11 +6,11 @@ import unittest
 
 class LexerTestCase(unittest.TestCase):
 
-    def assertLexesVersions(self, input, versions, *expected_tokens):
+    def assertLexesVersions(self, input, versions, *expected_tokens, **kwargs):
         for version in versions:
             tokens = expected_tokens
             self.buffer = source.Buffer(input)
-            self.lexer = lexer.Lexer(self.buffer, version)
+            self.lexer = lexer.Lexer(self.buffer, version, **kwargs)
             for token in self.lexer:
                 if len(tokens) < 2:
                     raise Exception("stray tokens: %s" % repr(token))
@@ -34,8 +34,8 @@ class LexerTestCase(unittest.TestCase):
 
     VERSIONS = [(2,6), (3,0), (3,1)]
 
-    def assertLexes(self, input, *tokens):
-        self.assertLexesVersions(input, self.VERSIONS, *tokens)
+    def assertLexes(self, input, *tokens, **kwargs):
+        self.assertLexesVersions(input, self.VERSIONS, *tokens, **kwargs)
 
     def assertDiagnoses(self, input, diag, *tokens):
         self.assertDiagnosesVersions(input, self.VERSIONS, diag, *tokens)
@@ -281,7 +281,8 @@ class LexerTestCase(unittest.TestCase):
                          "ident",   "x",
                          "newline", None,
                          "ident",   "x",
-                         "newline", None)
+                         "newline", None,
+                         "dedent",  None)
 
         self.assertDiagnosesVersions(
                          "    \tx\n\tx", [(3,0)],
@@ -293,7 +294,14 @@ class LexerTestCase(unittest.TestCase):
     def test_eof(self):
         self.assertLexes("\t",
                          "indent",  None,
-                         "eof",     None)
+                         "dedent",  None)
+
+    def test_interactive(self):
+        self.assertLexes("x\n\n",
+                         "ident",   "x",
+                         "newline", None,
+                         "newline", None,
+                         interactive=True)
 
     def test_diag_unrecognized(self):
         self.assertDiagnoses(

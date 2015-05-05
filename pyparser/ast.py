@@ -450,9 +450,10 @@ class ClassDef(keywordloc, stmt, ast.ClassDef):
     :ivar name_loc: location of name
     :ivar lparen_loc: location of ``(``, if any
     :ivar rparen_loc: location of ``)``, if any
+    :ivar colon_loc: location of ``:``
     :ivar at_locs: locations of decorator ``@``
     """
-    _locs = keywordloc._locs + ('name_loc', 'lparen_loc', 'rparen_loc', 'at_loc')
+    _locs = keywordloc._locs + ('name_loc', 'lparen_loc', 'rparen_loc', 'colon_loc', 'at_locs')
 class Continue(keywordloc, stmt, ast.Continue):
     """The ``continue`` statement."""
 class Delete(keywordloc, stmt, ast.Delete):
@@ -478,7 +479,7 @@ class Expr(stmt, ast.Expr):
 
     :ivar value: (:class:`expr`) value
     """
-class For(keywordloc, stmt, ast.While):
+class For(keywordloc, stmt, ast.For):
     """
     The ``for x in y:·  z·else:·  t`` statement.
 
@@ -506,13 +507,15 @@ class FunctionDef(keywordloc, stmt, ast.FunctionDef):
     :ivar colon_loc: location of ``:``, if any
     :ivar at_locs: locations of decorator ``@``
     """
-    _locs = keywordloc._locs + ('keyword_loc' 'name_loc', 'colon_loc', 'at_loc')
+    _locs = keywordloc._locs + ('name_loc', 'colon_loc', 'at_loc')
 class Global(keywordloc, stmt, ast.Global):
     """
     The ``global x, y`` statement.
 
-    :ivar names: (list of :class:`Name`) names
+    :ivar names: (list of string) names
+    :ivar name_locs: locations of names
     """
+    _locs = keywordloc._locs + ('name_locs',)
 class If(keywordloc, stmt, ast.If):
     """
     The ``if x:·  y·else:·  z`` or ``if x:·  y·elif: z·  t`` statement.
@@ -603,7 +606,7 @@ class While(keywordloc, stmt, ast.While):
     :ivar else_loc: location of ``else``, if any
     :ivar else_colon_loc: location of colon after ``else``, if any
     """
-    _locs = keywordloc._locs + ('while_loc', 'while_colon_loc', 'else_loc', 'else_colon_loc')
+    _locs = keywordloc._locs + ('while_colon_loc', 'else_loc', 'else_colon_loc')
 class With(keywordloc, stmt, ast.With):
     """
     The ``with x as y:·  z`` statement.
@@ -615,7 +618,7 @@ class With(keywordloc, stmt, ast.With):
     :ivar as_loc: location of ``as``, if any
     :ivar colon_loc: location of ``:``
     """
-    _locs = keywordloc._locs + ('colon_loc',)
+    _locs = keywordloc._locs + ('as_loc', 'colon_loc')
 
 class unaryop(commonloc):
     """Base class for unary numeric and boolean operators."""

@@ -136,6 +136,10 @@ class ParserTestCase(unittest.TestCase):
     ast_2 = {'ty': 'Num', 'n': 2}
     ast_3 = {'ty': 'Num', 'n': 3}
 
+    ast_expr_1 = {'ty': 'Expr', 'value': {'ty': 'Num', 'n': 1}}
+    ast_expr_2 = {'ty': 'Expr', 'value': {'ty': 'Num', 'n': 2}}
+    ast_expr_3 = {'ty': 'Expr', 'value': {'ty': 'Num', 'n': 3}}
+
     ast_x = {'ty': 'Name', 'id': 'x', 'ctx': None}
     ast_y = {'ty': 'Name', 'id': 'y', 'ctx': None}
     ast_z = {'ty': 'Name', 'id': 'z', 'ctx': None}
@@ -649,6 +653,13 @@ class ParserTestCase(unittest.TestCase):
             "  ~~~~~ slice.loc"
             "~~~~~~~~ loc")
 
+        self.assertParsesExpr(
+            {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
+             'slice': {'ty': 'Ellipsis'}},
+            "x[...]",
+            "  ~~~ slice.loc"
+            "~~~~~~ loc")
+
     def test_attribute(self):
         self.assertParsesExpr(
             {'ty': 'Attribute', 'value': self.ast_x, 'attr': 'zz', 'ctx': None},
@@ -658,7 +669,7 @@ class ParserTestCase(unittest.TestCase):
             "~~~~ loc")
 
     #
-    # STATEMENTS
+    # SIMPLE STATEMENTS
     #
 
     def test_assign(self):
@@ -674,6 +685,12 @@ class ParserTestCase(unittest.TestCase):
             "~~~~~~~~~ 0.loc"
             "  ^ 0.op_locs.0"
             "      ^ 0.op_locs.1")
+
+        self.assertParsesSuite(
+            [{'ty': 'Assign', 'targets': [self.ast_x], 'value':
+              {'ty': 'Yield', 'value': self.ast_y}}],
+            "x = yield y",
+            "~~~~~~~~~~~ 0.loc")
 
     def test_augassign(self):
         self.assertParsesSuite(
@@ -747,6 +764,256 @@ class ParserTestCase(unittest.TestCase):
             "x ^= 1",
             "~~~~~~ 0.loc"
             "  ~~ 0.op.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'AugAssign', 'op': {'ty': 'Add'}, 'target': self.ast_x, 'value':
+              {'ty': 'Yield', 'value': self.ast_y}}],
+            "x += yield y",
+            "~~~~~~~~~~~~ 0.loc")
+
+    def test_print(self):
+        self.assertParsesSuite(
+            [{'ty': 'Print', 'dest': None, 'values': [self.ast_1], 'nl': False}],
+            "print 1",
+            "~~~~~ 0.keyword_loc"
+            "~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Print', 'dest': None, 'values': [self.ast_1], 'nl': True}],
+            "print 1,",
+            "~~~~~ 0.keyword_loc"
+            "~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Print', 'dest': self.ast_2, 'values': [self.ast_1], 'nl': False}],
+            "print >>2, 1",
+            "~~~~~ 0.keyword_loc"
+            "      ~~ 0.dest_loc"
+            "~~~~~~~~~~~~ 0.loc")
+
+    def test_del(self):
+        self.assertParsesSuite(
+            [{'ty': 'Delete', 'targets': self.ast_x}],
+            "del x",
+            "~~~ 0.keyword_loc"
+            "~~~~~ 0.loc")
+
+    def test_pass(self):
+        self.assertParsesSuite(
+            [{'ty': 'Pass'}],
+            "pass",
+            "~~~~ 0.keyword_loc"
+            "~~~~ 0.loc")
+
+    def test_break(self):
+        self.assertParsesSuite(
+            [{'ty': 'Break'}],
+            "break",
+            "~~~~~ 0.keyword_loc"
+            "~~~~~ 0.loc")
+
+    def test_continue(self):
+        self.assertParsesSuite(
+            [{'ty': 'Continue'}],
+            "continue",
+            "~~~~~~~~ 0.keyword_loc"
+            "~~~~~~~~ 0.loc")
+
+    def test_return(self):
+        self.assertParsesSuite(
+            [{'ty': 'Return', 'value': None}],
+            "return",
+            "~~~~~~ 0.keyword_loc"
+            "~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Return', 'value': self.ast_x}],
+            "return x",
+            "~~~~~~ 0.keyword_loc"
+            "~~~~~~~~ 0.loc")
+
+    def test_yield(self):
+        self.assertParsesSuite(
+            [{'ty': 'Expr', 'value': {'ty': 'Yield', 'value': self.ast_x}}],
+            "yield x",
+            "~~~~~ 0.value.keyword_loc"
+            "~~~~~~~ 0.value.loc"
+            "~~~~~~~ 0.loc")
+
+    def test_raise(self):
+        self.assertParsesSuite(
+            [{'ty': 'Raise', 'type': None, 'inst': None, 'tback': None}],
+            "raise",
+            "~~~~~ 0.keyword_loc"
+            "~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Raise', 'type': self.ast_x, 'inst': None, 'tback': None}],
+            "raise x",
+            "~~~~~ 0.keyword_loc"
+            "~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Raise', 'type': self.ast_x, 'inst': self.ast_y, 'tback': None}],
+            "raise x, y",
+            "~~~~~ 0.keyword_loc"
+            "~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Raise', 'type': self.ast_x, 'inst': self.ast_y, 'tback': self.ast_z}],
+            "raise x, y, z",
+            "~~~~~ 0.keyword_loc"
+            "~~~~~~~~~~~~~ 0.loc")
+
+    def test_global(self):
+        self.assertParsesSuite(
+            [{'ty': 'Global', 'names': ['x', 'y']}],
+            "global x, y",
+            "~~~~~~ 0.keyword_loc"
+            "       ^ 0.name_locs.0"
+            "          ^ 0.name_locs.1"
+            "~~~~~~~~~~~ 0.loc")
+
+    def test_exec(self):
+        self.assertParsesSuite(
+            [{'ty': 'Exec', 'body': self.ast_1, 'locals': None, 'globals': None}],
+            "exec 1",
+            "~~~~ 0.keyword_loc"
+            "~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Exec', 'body': self.ast_1, 'locals': self.ast_2, 'globals': None}],
+            "exec 1 in 2",
+            "~~~~ 0.keyword_loc"
+            "       ~~ 0.in_loc"
+            "~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Exec', 'body': self.ast_1, 'locals': self.ast_2, 'globals': self.ast_3}],
+            "exec 1 in 2, 3",
+            "~~~~ 0.keyword_loc"
+            "       ~~ 0.in_loc"
+            "~~~~~~~~~~~~~~ 0.loc")
+
+    def test_assert(self):
+        self.assertParsesSuite(
+            [{'ty': 'Assert', 'test': self.ast_1, 'msg': None}],
+            "assert 1",
+            "~~~~~~ 0.keyword_loc"
+            "~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Assert', 'test': self.ast_1, 'msg': self.ast_2}],
+            "assert 1, 2",
+            "~~~~~~ 0.keyword_loc"
+            "~~~~~~~~~~~ 0.loc")
+
+    #
+    # COMPOUND STATEMENTS
+    #
+
+    def test_if(self):
+        self.assertParsesSuite(
+            [{'ty': 'If', 'test': self.ast_x, 'body': [self.ast_expr_1], 'orelse': []}],
+            "if x:·  1",
+            "^^ 0.keyword_loc"
+            "    ^ 0.if_colon_loc"
+            "~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'If', 'test': self.ast_x,
+              'body': [self.ast_expr_1], 'orelse': [self.ast_expr_2] }],
+            "if x:·  1·else:·  2",
+            "^^ 0.keyword_loc"
+            "    ^ 0.if_colon_loc"
+            "          ^^^^ 0.else_loc"
+            "              ^ 0.else_colon_loc"
+            "~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'If', 'test': self.ast_x, 'body': [self.ast_expr_1], 'orelse': [
+                {'ty': 'If', 'test': self.ast_y, 'body': [self.ast_expr_2],
+                 'orelse': [self.ast_expr_3]}
+            ]}],
+            "if x:·  1·elif y:·  2·else:·  3",
+            "^^ 0.keyword_loc"
+            "    ^ 0.if_colon_loc"
+            "          ~~~~ 0.orelse.0.keyword_loc"
+            "                ^ 0.orelse.0.if_colon_loc"
+            "                      ~~~~ 0.orelse.0.else_loc"
+            "                          ^ 0.orelse.0.else_colon_loc"
+            "          ~~~~~~~~~~~~~~~~~~~~~ 0.orelse.0.loc"
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+    def test_while(self):
+        self.assertParsesSuite(
+            [{'ty': 'While', 'test': self.ast_x, 'body': [self.ast_expr_1], 'orelse': []}],
+            "while x:·  1",
+            "~~~~~ 0.keyword_loc"
+            "       ^ 0.while_colon_loc"
+            "~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'While', 'test': self.ast_x, 'body': [self.ast_expr_1],
+              'orelse': [self.ast_expr_2]}],
+            "while x:·  1·else:·  2",
+            "~~~~~ 0.keyword_loc"
+            "       ^ 0.while_colon_loc"
+            "             ~~~~ 0.else_loc"
+            "                 ^ 0.else_colon_loc"
+            "~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+    def test_for(self):
+        self.assertParsesSuite(
+            [{'ty': 'For', 'target': self.ast_x, 'iter': self.ast_y,
+              'body': [self.ast_expr_1], 'orelse': []}],
+            "for x in y:·  1",
+            "~~~ 0.keyword_loc"
+            "      ~~ 0.in_loc"
+            "          ^ 0.for_colon_loc"
+            "~~~~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'For', 'target': self.ast_x, 'iter': self.ast_y,
+              'body': [self.ast_expr_1], 'orelse': [self.ast_expr_2]}],
+            "for x in y:·  1·else:·  2",
+            "                ~~~~ 0.else_loc"
+            "                    ^ 0.else_colon_loc"
+            "~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+    def test_with(self):
+        self.assertParsesSuite(
+            [{'ty': 'With', 'context_expr': self.ast_x, 'optional_vars': None,
+              'body': [self.ast_expr_1]}],
+            "with x:·  1",
+            "~~~~ 0.keyword_loc"
+            "      ^ 0.colon_loc"
+            "~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'With', 'context_expr': self.ast_x, 'optional_vars': self.ast_y,
+              'body': [self.ast_expr_1]}],
+            "with x as y:·  1",
+            "       ~~ 0.as_loc"
+            "~~~~~~~~~~~~~~~~ 0.loc")
+
+    def test_class(self):
+        self.assertParsesSuite(
+            [{'ty': 'ClassDef', 'name': 'x', 'bases': [],
+              'body': [{'ty': 'Pass'}], 'decorator_list': []}],
+            "class x:·  pass",
+            "~~~~~ 0.keyword_loc"
+            "      ^ 0.name_loc"
+            "       ^ 0.colon_loc"
+            "~~~~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'ClassDef', 'name': 'x', 'bases': [self.ast_y, self.ast_z],
+              'body': [{'ty': 'Pass'}], 'decorator_list': []}],
+            "class x(y, z):·  pass",
+            "       ^ 0.lparen_loc"
+            "            ^ 0.rparen_loc"
+            "~~~~~~~~~~~~~~~~~~~~~ 0.loc")
 
     #
     # PARSING MODES

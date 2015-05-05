@@ -228,15 +228,15 @@ def List(inner_rule, separator_tok, trailing, leading=True, loc=None):
             while True:
                 result = separator_rule(parser)
                 if result is unmatched:
-                    results.trailing_comma = False
+                    results.trailing_comma = None
                     return results
 
-                result = inner_rule(parser)
-                if result is unmatched:
-                    results.trailing_comma = True
+                result_1 = inner_rule(parser)
+                if result_1 is unmatched:
+                    results.trailing_comma = result
                     return results
                 else:
-                    results.append(result)
+                    results.append(result_1)
         return rule
 
 # Python AST specific parser combinators
@@ -365,7 +365,7 @@ class Parser:
         return classfuncdef
 
     @action(Seq(Loc('def'), Tok('ident'), Rule('parameters'), Loc(':'), Rule('suite')))
-    def funcdef(def_loc, ident_tok, args, colon_loc, suite):
+    def funcdef(self, def_loc, ident_tok, args, colon_loc, suite):
         """funcdef: 'def' NAME parameters ':' suite"""
         return ast.FunctionDef(name=ident_tok.value, args=args, body=suite, decorator_list=[],
                                keyword_loc=def_loc, name_loc=ident_tok.value, colon_loc=colon_loc)
@@ -457,13 +457,17 @@ class Parser:
 
     @action(List(Rule('test'), ',', trailing=True))
     def print_stmt_1(self, values):
-        return ast.Print(dest=None, values=values, nl=values.trailing,
-                         dest_loc=None)
+        loc = values.trailing_comma.loc if values.trailing_comma else values[-1].loc
+        nl = True if values.trailing_comma else False
+        return ast.Print(dest=None, values=values, nl=nl,
+                         dest_loc=None, loc=loc)
 
     @action(Seq(Loc('>>'), Rule('test'), Tok(','), List(Rule('test'), ',', trailing=True)))
     def print_stmt_2(self, dest_loc, dest, comma_tok, values):
-        return ast.Print(dest=dest, values=values, nl=values.trailing,
-                         dest_loc=dest_loc)
+        loc = values.trailing_comma.loc if values.trailing_comma else values[-1].loc
+        nl = True if values.trailing_comma else False
+        return ast.Print(dest=dest, values=values, nl=nl,
+                         dest_loc=dest_loc, loc=loc)
 
     @action(Seq(Loc('print'), Alt(print_stmt_1, print_stmt_2)))
     def print_stmt(self, print_loc, stmt):
@@ -473,12 +477,13 @@ class Parser:
                               '>>' test [ (',' test)+ [','] ] )
         """
         stmt.keyword_loc = print_loc
+        stmt.loc = print_loc.join(stmt.loc)
         return stmt
 
     @action(Seq(Loc('del'), Rule('exprlist')))
     def del_stmt(self, stmt_loc, exprs):
         """del_stmt: 'del' exprlist"""
-        return ast.Delete(targets=list(map(self._assignable, exprs)),
+        return ast.Delete(targets=self._assignable(exprs),
                           loc=stmt_loc.join(exprs.loc), keyword_loc=stmt_loc)
 
     @action(Loc('pass'))
@@ -503,10 +508,16 @@ class Parser:
     @action(Seq(Loc('return'), Opt(Rule('testlist'))))
     def return_stmt(self, stmt_loc, values):
         """return_stmt: 'return' [testlist]"""
-        return ast.Return(loc=stmt_loc.join(values.loc), keyword_loc=stmt_loc)
+        loc = stmt_loc
+        if values:
+            loc = loc.join(values.loc)
+        return ast.Return(value=values,
+                          loc=loc, keyword_loc=stmt_loc)
 
-    yield_stmt = Rule('yield_expr')
-    """yield_stmt: yield_expr"""
+    @action(Rule('yield_expr'))
+    def yield_stmt(self, expr):
+        """yield_stmt: yield_expr"""
+        return ast.Expr(value=expr, loc=expr.loc)
 
     @action(Seq(Loc('raise'), Opt(Seq(Rule('test'),
                                       Opt(Seq(Tok(','), Rule('test'),
@@ -514,12 +525,17 @@ class Parser:
     def raise_stmt(self, raise_loc, type_opt):
         """raise_stmt: 'raise' [test [',' test [',' test]]]"""
         type_ = inst = tback = None
+        loc = raise_loc
         if type_opt:
-            _, type_, inst_opt = type_opt
+            type_, inst_opt = type_opt
+            loc = loc.join(type_.loc)
             if inst_opt:
-                inst, tback = inst_opt
+                _, inst, tback = inst_opt
+                loc = loc.join(inst.loc)
+                if tback:
+                    loc = loc.join(tback.loc)
         return ast.Raise(type=type_, inst=inst, tback=tback,
-                         raise_loc=raise_loc)
+                         keyword_loc=raise_loc, loc=loc)
 
     import_stmt = Alt(Rule('import_name'), Rule('import_from'))
     """import_stmt: import_name | import_from"""
@@ -593,27 +609,36 @@ class Parser:
                '.'.join(list(map(lambda x: x.value, idents)))
 
     @action(Seq(Loc('global'), List(Tok('ident'), ',', trailing=False)))
-    def global_stmt(self, keyword_loc, names):
+    def global_stmt(self, global_loc, names):
         """global_stmt: 'global' NAME (',' NAME)*"""
-        return ast.Global(names=list(map(ast.Name, names)),
-                          keyword_loc=keyword_loc)
+        return ast.Global(names=list(map(lambda x: x.value, names)),
+                          name_locs=list(map(lambda x: x.loc, names)),
+                          keyword_loc=global_loc, loc=global_loc.join(names[-1].loc))
 
     @action(Seq(Loc('exec'), Rule('expr'),
                 Opt(Seq(Loc('in'), Rule('test'),
                         Opt(SeqN(1, Loc(','), Rule('test')))))))
-    def exec_stmt(self, keyword_loc, body, in_opt):
+    def exec_stmt(self, exec_loc, body, in_opt):
         """exec_stmt: 'exec' expr ['in' test [',' test]]"""
-        in_loc, locals, globals_opt = None, None, None
+        in_loc, locals, globals = None, None, None
+        loc = exec_loc.join(body.loc)
         if in_opt:
-            in_loc, locals, globals_opt = in_opt
+            in_loc, locals, globals = in_opt
+            if globals:
+                loc = loc.join(globals.loc)
+            else:
+                loc = loc.join(locals.loc)
         return ast.Exec(body=body, locals=locals, globals=globals,
-                        keyword_loc=keyword_loc, in_loc=in_loc)
+                        loc=loc, keyword_loc=exec_loc, in_loc=in_loc)
 
     @action(Seq(Loc('assert'), Rule('test'), Opt(SeqN(1, Tok(','), Rule('test')))))
-    def assert_stmt(self, keyword_loc, test, msg):
+    def assert_stmt(self, assert_loc, test, msg):
         """assert_stmt: 'assert' test [',' test]"""
+        loc = assert_loc.join(test.loc)
+        if msg:
+            loc = loc.join(msg.loc)
         return ast.Assert(test=test, msg=msg,
-                          keyword_loc=keyword_loc)
+                          loc=loc, keyword_loc=assert_loc)
 
     @action(Alt(Rule('if_stmt'), Rule('while_stmt'), Rule('for_stmt'),
                 Rule('try_stmt'), Rule('with_stmt'), Rule('funcdef'),
@@ -637,38 +662,42 @@ class Parser:
         for elif_ in elifs:
             stmt.keyword_loc, stmt.test, stmt.if_colon_loc, stmt.body = elif_
             stmt.loc = stmt.keyword_loc.join(stmt.body[-1].loc)
-            if stmt.orelse: stmt.loc = stmt.loc.join(stmt.orelse[-1])
+            if stmt.orelse: stmt.loc = stmt.loc.join(stmt.orelse[-1].loc)
             stmt = ast.If(orelse=[stmt],
                           else_loc=None, else_colon_loc=None)
 
         stmt.keyword_loc, stmt.test, stmt.if_colon_loc, stmt.body = \
             if_loc, test, if_colon_loc, body
         stmt.loc = stmt.keyword_loc.join(stmt.body[-1].loc)
-        if stmt.orelse: stmt.loc = stmt.loc.join(stmt.orelse[-1])
+        if stmt.orelse: stmt.loc = stmt.loc.join(stmt.orelse[-1].loc)
         return stmt
 
     @action(Seq(Loc('while'), Rule('test'), Loc(':'), Rule('suite'),
                 Opt(Seq(Loc('else'), Loc(':'), Rule('suite')))))
-    def while_stmt(while_loc, test, while_colon_loc, body, else_opt):
+    def while_stmt(self, while_loc, test, while_colon_loc, body, else_opt):
         """while_stmt: 'while' test ':' suite ['else' ':' suite]"""
         stmt = ast.While(test=test, body=body, orelse=[],
-                         while_loc=while_loc, while_colon_loc=while_colon_loc,
-                         else_loc=None, else_colon_loc=None)
+                         keyword_loc=while_loc, while_colon_loc=while_colon_loc,
+                         else_loc=None, else_colon_loc=None,
+                         loc=while_loc.join(body[-1].loc))
         if else_opt:
-            stmt.else_loc, stmt.else_colon_loc, orelse = else_opt
+            stmt.else_loc, stmt.else_colon_loc, stmt.orelse = else_opt
+            stmt.loc = stmt.loc.join(stmt.orelse[-1].loc)
 
         return stmt
 
     @action(Seq(Loc('for'), Rule('exprlist'), Loc('in'), Rule('testlist'),
                 Loc(':'), Rule('suite'),
                 Opt(Seq(Loc('else'), Loc(':'), Rule('suite')))))
-    def for_stmt(for_loc, target, in_loc, iter, for_colon_loc, body, else_opt):
+    def for_stmt(self, for_loc, target, in_loc, iter, for_colon_loc, body, else_opt):
         """for_stmt: 'for' exprlist 'in' testlist ':' suite ['else' ':' suite]"""
         stmt = ast.For(target=self._assignable(target), iter=iter, body=body, orelse=[],
-                       for_loc=for_loc, in_loc=in_loc, for_colon_loc=for_colon_loc,
-                       else_loc=None, else_colon_loc=None)
+                       keyword_loc=for_loc, in_loc=in_loc, for_colon_loc=for_colon_loc,
+                       else_loc=None, else_colon_loc=None,
+                       loc=for_loc.join(body[-1].loc))
         if else_opt:
-            stmt.else_loc, stmt.else_colon_loc, orelse = else_opt
+            stmt.else_loc, stmt.else_colon_loc, stmt.orelse = else_opt
+            stmt.loc = stmt.loc.join(stmt.orelse[-1].loc)
 
         return stmt
 
@@ -716,11 +745,14 @@ class Parser:
         return stmt
 
     @action(Seq(Loc('with'), Rule('test'), Opt(Rule('with_var')), Loc(':'), Rule('suite')))
-    def with_stmt(with_loc, context, with_var, colon_loc, body):
+    def with_stmt(self, with_loc, context, with_var, colon_loc, body):
         """with_stmt: 'with' test [ with_var ] ':' suite"""
-        as_loc, optional_vars = with_var
-        return ast.With(context=context, optional_vars=optional_vars, body=body,
-                        keyword_loc=with_loc, as_loc=as_loc, colon_loc=colon_loc)
+        as_loc = optional_vars = None
+        if with_var:
+            as_loc, optional_vars = with_var
+        return ast.With(context_expr=context, optional_vars=optional_vars, body=body,
+                        keyword_loc=with_loc, as_loc=as_loc, colon_loc=colon_loc,
+                        loc=with_loc.join(body[-1].loc))
 
     with_var = Seq(Loc('as'), Rule('expr'))
     """with_var: 'as' expr"""
@@ -728,7 +760,7 @@ class Parser:
     @action(Seq(Loc('except'),
                 Opt(Seq(Rule('test'),
                         Opt(Seq(Alt(Loc('as'), Loc(',')), Rule('test')))))))
-    def except_clause(except_loc, exc_opt):
+    def except_clause(self, except_loc, exc_opt):
         """except_clause: 'except' [test [('as' | ',') test]]"""
         type_ = name = as_loc = None
         if exc_opt:
@@ -738,8 +770,12 @@ class Parser:
         return ast.ExceptHandler(type=type_, name=name,
                                  except_loc=except_loc, as_loc=as_loc)
 
+    @action(Plus(Rule('stmt')))
+    def suite_1(self, stmts):
+        return reduce(list.__add__, stmts, [])
+
     suite = Alt(Rule('simple_stmt'),
-                SeqN(2, Tok('newline'), Tok('indent'), Plus(Rule('stmt')), Tok('dedent')))
+                SeqN(2, Tok('newline'), Tok('indent'), suite_1, Tok('dedent')))
     """suite: simple_stmt | NEWLINE INDENT stmt+ DEDENT"""
 
     # 2.x-only backwards compatibility start
@@ -1031,17 +1067,19 @@ class Parser:
                         loc=None)
 
     @action(Seq(Loc('class'), Tok('ident'),
-                Opt(BeginEnd('(', Rule('testlist'), ')')),
+                Opt(Seq(Loc('('), List(Rule('test'), ',', trailing=True), Loc(')'))),
                 Loc(':'), Rule('suite')))
-    def classdef(class_loc, name_tok, bases_opt, colon_loc, body):
+    def classdef(self, class_loc, name_tok, bases_opt, colon_loc, body):
         """classdef: 'class' NAME ['(' [testlist] ')'] ':' suite"""
-        bases = lparen_loc = rparen_loc = None
+        bases, lparen_loc, rparen_loc = [], None, None
         if bases_opt:
-            lparen_loc, bases, rparen_loc = \
-                bases_opt.begin_loc, bases_opt.elts, bases_opt.end_loc
+            lparen_loc, bases, rparen_loc = bases_opt
 
-        return ast.ClassDef(name=name_tok.value, bases=bases, body=body, decorator_list=[],
-                            keyword_loc=class_loc, lparen_loc=lparen_loc, rparen_loc=rparen_loc)
+        return ast.ClassDef(name=name_tok.value, bases=bases, body=body,
+                            decorator_list=[], at_locs=[],
+                            keyword_loc=class_loc, lparen_loc=lparen_loc, rparen_loc=rparen_loc,
+                            name_loc=name_tok.loc, colon_loc=colon_loc,
+                            loc=class_loc.join(body[-1].loc))
 
     @action(Seq(Loc('*'), Rule('test'), Star(SeqN(1, Tok(','), Rule('argument'))),
                 Opt(Seq(Tok(','), Loc('**'), Rule('test')))))

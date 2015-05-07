@@ -1,9 +1,10 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 from .. import source, lexer
-import os
+import os, codecs
 
 _buf = None
-with open(os.path.join(os.path.dirname(__file__), '..', 'parser.py')) as f:
+with codecs.open(os.path.join(os.path.dirname(__file__), '..', 'parser.py'),
+                 encoding='utf-8') as f:
     _buf = source.Buffer(f.read(), f.name)
 
 # Inject the grammar with locations of rules, because Python's
@@ -54,7 +55,8 @@ def instrument():
             if data is not None:
                 rewriter.insert_before(token.loc, data)
 
-    with open(os.path.join(os.path.dirname(__file__), 'parser.py'), 'w') as f:
+    with codecs.open(os.path.join(os.path.dirname(__file__), 'parser.py'), 'w',
+                     encoding='utf-8') as f:
         f.write(rewriter.rewrite().source)
 
 # Produce an HTML report for test coverage of parser rules.
@@ -89,8 +91,8 @@ def report(parser, name='parser'):
         lambda x: r"<span id='{0}' class='line'>{1}</span>".format(*x),
         enumerate(content.split("\n"), 1)))
 
-    with open(os.path.join(os.path.dirname(__file__), '..', '..',
-              'doc', 'coverage', name + '.html'), 'w') as f:
+    with codecs.open(os.path.join(os.path.dirname(__file__), '..', '..',
+              'doc', 'coverage', name + '.html'), 'w', encoding='utf-8') as f:
         f.write(r"""
 <!DOCTYPE html>
 <html>

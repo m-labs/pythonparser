@@ -1,3 +1,5 @@
+# encoding:utf-8
+
 """
 The :mod:`parser` module concerns itself with parsing Python source.
 """
@@ -6,13 +8,54 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from functools import reduce
 from . import source, diagnostic, lexer, ast
 
+# A few notes about our approach to parsing:
+#
+# Python uses an LL(1) parser generator. It's a bit weird, because
+# the usual reason to choose LL(1) is to make a handwritten parser
+# possible, however Python's grammar is formulated in a way that
+# is much more easily recognized if you make an FSM rather than
+# the usual "if accept(token)..." ladder. So in a way it is
+# the worst of both worlds.
+#
+# We don't use a parser generator because we want to have an unified
+# grammar for all Python versions, and also have grammar coverage
+# analysis and nice error recovery. To make the grammar compact,
+# we use combinators to compose it from predefined fragments,
+# such as "sequence" or "alternation" or "Kleene star". This easily
+# gives us one token of lookahead in most cases, but e.g. not
+# in the following one:
+#
+#     argument: test | test '=' test
+#
+# There are two issues with this. First, in an alternation, the first
+# variant will be tried (and accepted) earlier. Second, if we reverse
+# them, by the point it is clear ``'='`` will not be accepted, ``test``
+# has already been consumed.
+#
+# The way we fix this is by reordering rules so that longest match
+# comes first, and adding backtracking on alternations (as well as
+# plus and star, since those have a hidden alternation inside).
+#
+# While backtracking can in principle make asymptotical complexity
+# worse, it never makes parsing syntactically correct code supralinear
+# with Python's LL(1) grammar, and we could not come up with any
+# pathological incorrect input as well.
+
+# Coverage data
+_all_rules = []
+
 # Generic LL parsing combinators
 class Unmatched:
-    def __repr__(self):
-        return "<can't parse>"
-unmatched = Unmatched()
+    def __init__(self, diagnostic=None):
+        self.diagnostic = diagnostic
 
-_all_rules = []
+    def __repr__(self):
+        if self.diagnostic:
+            return "<can't parse: %s>" % repr(self.diagnostic)
+        else:
+            return "<can't parse>"
+
+unmatched = Unmatched()
 
 def llrule(loc, expected, cases=1):
     if loc is None:
@@ -24,7 +67,7 @@ def llrule(loc, expected, cases=1):
             if cases == 1:
                 def rule(*args, **kwargs):
                     result = inner_rule(*args, **kwargs)
-                    if result is not unmatched:
+                    if not isinstance(result, Unmatched):
                         rule.covered[0] = True
                     return result
             else:
@@ -50,11 +93,12 @@ def action(inner_rule, loc=None):
         @llrule(loc, inner_rule.expected)
         def outer_rule(parser):
             result = inner_rule(parser)
+            if isinstance(result, Unmatched):
+                return result
             if isinstance(result, tuple):
-                result = mapper(parser, *result)
-            elif result is not unmatched:
-                result = mapper(parser, result)
-            return result
+                return mapper(parser, *result)
+            else:
+                return mapper(parser, result)
         return outer_rule
     return decorator
 
@@ -77,9 +121,9 @@ def Loc(kind, loc=None):
     @llrule(loc, lambda parser: [kind])
     def rule(parser):
         result = parser._accept(kind)
-        if result is not unmatched:
-            return result.loc
-        return unmatched
+        if isinstance(result, Unmatched):
+            return result
+        return result.loc
     return rule
 
 def Rule(name, loc=None):
@@ -94,7 +138,7 @@ def Expect(inner_rule, loc=None):
     @llrule(loc, inner_rule.expected)
     def rule(parser):
         result = inner_rule(parser)
-        if result is unmatched:
+        if isinstance(result, Unmatched):
             expected = inner_rule.expected(parser)
             if len(expected) > 1:
                 expected = ' or '.join([', '.join(expected[0:-1]), expected[-1]])
@@ -106,7 +150,7 @@ def Expect(inner_rule, loc=None):
                 "error", "unexpected {actual}: expected {expected}",
                 {'actual': parser.token.kind, 'expected': expected},
                 parser.token.loc)
-            raise diagnostic.DiagnosticException(error)
+            return Unmatched(diagnostic.DiagnosticException(error))
         return result
     return rule
 
@@ -115,13 +159,19 @@ def Seq(first_rule, *rest_of_rules, **kwargs):
     A rule that accepts a sequence of tokens satisfying ``rules`` and returns a tuple
     containing their return values, or None if the first rule was not satisfied.
     """
-    rest_of_rules = list(map(Expect, rest_of_rules))
     @llrule(kwargs.get('loc', None), first_rule.expected)
     def rule(parser):
-        first_result = first_rule(parser)
-        if first_result is not unmatched:
-            return tuple([first_result]) + tuple(map(lambda rule: rule(parser), rest_of_rules))
-        return unmatched
+        result = first_rule(parser)
+        if isinstance(result, Unmatched):
+            return result
+
+        results = [result]
+        for rule in rest_of_rules:
+            result = rule(parser)
+            if isinstance(result, Unmatched):
+                return result
+            results.append(result)
+        return tuple(results)
     return rule
 
 def SeqN(n, *inner_rules, **kwargs):
@@ -145,18 +195,24 @@ def Alt(*inner_rules, **kwargs):
     if loc is not None:
         @llrule(loc, expected, cases=len(inner_rules))
         def rule(parser):
+            data = parser._save()
             for idx, inner_rule in enumerate(inner_rules):
                 result = inner_rule(parser)
-                if result is not unmatched:
+                if isinstance(result, Unmatched):
+                    parser._restore(data)
+                else:
                     rule.covered[idx] = True
                     return result
             return unmatched
     else:
         @llrule(loc, expected, cases=len(inner_rules))
         def rule(parser):
+            data = parser._save()
             for inner_rule in inner_rules:
                 result = inner_rule(parser)
-                if result is not unmatched:
+                if isinstance(result, Unmatched):
+                    parser._restore(data)
+                else:
                     return result
             return unmatched
     return rule
@@ -174,8 +230,10 @@ def Star(inner_rule, loc=None):
     def rule(parser):
         results = []
         while True:
+            data = parser._save()
             result = inner_rule(parser)
-            if result is unmatched:
+            if isinstance(result, Unmatched):
+                parser._restore(data)
                 return results
             results.append(result)
     return rule
@@ -188,13 +246,15 @@ def Plus(inner_rule, loc=None):
     @llrule(loc, inner_rule.expected)
     def rule(parser):
         result = inner_rule(parser)
-        if result is unmatched:
-            return unmatched
+        if isinstance(result, Unmatched):
+            return result
 
         results = [result]
         while True:
+            data = parser._save()
             result = inner_rule(parser)
-            if result is unmatched:
+            if isinstance(result, Unmatched):
+                parser._restore(data)
                 return results
             results.append(result)
     return rule
@@ -220,19 +280,19 @@ def List(inner_rule, separator_tok, trailing, leading=True, loc=None):
 
             if leading:
                 result = inner_rule(parser)
-                if result is unmatched:
-                    return unmatched
+                if isinstance(result, Unmatched):
+                    return result
                 else:
                     results.append(result)
 
             while True:
                 result = separator_rule(parser)
-                if result is unmatched:
+                if isinstance(result, Unmatched):
                     results.trailing_comma = None
                     return results
 
                 result_1 = inner_rule(parser)
-                if result_1 is unmatched:
+                if isinstance(result_1, Unmatched):
                     results.trailing_comma = result
                     return results
                 else:
@@ -241,12 +301,13 @@ def List(inner_rule, separator_tok, trailing, leading=True, loc=None):
 
 # Python AST specific parser combinators
 def Newline(loc=None):
-    """A rule that accepts token of kind ``newline`` and returns []."""
+    """A rule that accepts token of kind ``newline`` and returns an empty list."""
     @llrule(loc, lambda parser: ['newline'])
     def rule(parser):
-        if parser._accept('newline') is not unmatched:
-            return []
-        return unmatched
+        result = parser._accept('newline')
+        if isinstance(result, Unmatched):
+            return result
+        return []
     return rule
 
 def Oper(klass, *kinds, **kwargs):
@@ -291,12 +352,22 @@ class Parser:
 
     # Generic LL parsing methods
     def __init__(self, lexer):
-        self.lexer = lexer
-        self._advance()
+        self.lexer  = lexer
+        self.tokens = list(lexer) + [self.lexer.next(eof_token=True)]
+        self.index  = 0
+        self.token  = self.tokens[self.index]
+
+    def _save(self):
+        return self.index
+
+    def _restore(self, data):
+        self.index = data
+        self.token = self.tokens[self.index]
 
     def _advance(self):
-        self.token = self.lexer.next(eof_token=True)
-        return self.token
+        if self.index < len(self.tokens) - 1:
+            self.index += 1
+        self.token = self.tokens[self.index]
 
     def _accept(self, expected_kind):
         if self.token.kind == expected_kind:
@@ -323,6 +394,10 @@ class Parser:
                              star_loc=None, vararg_loc=None, dstar_loc=None, kwarg_loc=None,
                              default_equals_locs=[], begin_loc=None, end_loc=None, loc=None)
 
+    def _empty_arglist(self):
+        return ast.Call(args=[], keywords=[], starargs=None, kwargs=None,
+                        star_loc=None, dstar_loc=None, loc=None)
+
     # Python-specific methods
     @action(Alt(Newline(),
                 Rule('simple_stmt'),
@@ -344,7 +419,13 @@ class Parser:
         """eval_input: testlist NEWLINE* ENDMARKER"""
         return ast.Expression(body=[expr], loc=expr.loc)
 
-    @action(Seq(Loc('@'), Rule('dotted_name'), Opt(BeginEnd('(', Rule('arglist'), ')')),
+    @action(Opt(Rule('arglist')))
+    def decorator_1(self, args):
+        if args is None:
+            return self._empty_arglist()
+        return args
+
+    @action(Seq(Loc('@'), Rule('dotted_name'), Opt(BeginEnd('(', decorator_1, ')')),
             Loc('newline')))
     def decorator(self, at_loc, dotted_name, call_opt, newline_loc):
         """decorator: '@' dotted_name [ '(' [arglist] ')' ] NEWLINE"""
@@ -582,7 +663,10 @@ class Parser:
     def import_from(self, from_loc, module_name, import_loc, names):
         """import_from: ('from' ('.'* dotted_name | '.'+)
                          'import' ('*' | '(' import_as_names ')' | import_as_names))"""
-        dots, (module_loc, module) = module_name
+        dots, dotted_name_opt = module_name
+        module_loc = module = None
+        if dotted_name_opt:
+            module_loc, module = dotted_name_opt
         lparen_loc, names, rparen_loc = names
         dots_loc = None
         if dots != []:
@@ -890,7 +974,7 @@ class Parser:
                   Oper(ast.GtE, '>='), Oper(ast.LtE, '<='), Oper(ast.NotEq, '<>'),
                   Oper(ast.NotEq, '!='),
                   Oper(ast.In, 'in'), Oper(ast.NotIn, 'not', 'in'),
-                  Oper(ast.Is, 'is'), Oper(ast.IsNot, 'is', 'not'))
+                  Oper(ast.IsNot, 'is', 'not'), Oper(ast.Is, 'is'))
     """comp_op: '<'|'>'|'=='|'>='|'<='|'<>'|'!='|'in'|'not' 'in'|'is'|'is' 'not'"""
 
     expr = BinOper('xor_expr', Oper(ast.BitOr, '|'))
@@ -1027,7 +1111,13 @@ class Parser:
                              loc=dot_loc.join(ident_tok.loc),
                              attr_loc=ident_tok.loc, dot_loc=dot_loc)
 
-    trailer = Alt(BeginEnd('(', Rule('arglist'), ')'),
+    @action(Opt(Rule('arglist')))
+    def trailer_2(self, args):
+        if args is None:
+            return self._empty_arglist()
+        return args
+
+    trailer = Alt(BeginEnd('(', trailer_2, ')'),
                   BeginEnd('[', Rule('subscriptlist'), ']'),
                   trailer_1)
     """trailer: '(' [arglist] ')' | '[' subscriptlist ']' | '.' NAME"""
@@ -1046,11 +1136,8 @@ class Parser:
     def subscript_1(self, dot_1_loc, dot_2_loc, dot_3_loc):
         return ast.Ellipsis(loc=dot_1_loc.join(dot_3_loc))
 
-    def subscript_2(self, expr):
-        return ast.Index(value=expr,
-                         loc=expr.loc)
-
-    def subscript_3(self, lower_opt, colon_loc, upper_opt, step_opt):
+    @action(Seq(Opt(Rule('test')), Loc(':'), Opt(Rule('test')), Opt(Rule('sliceop'))))
+    def subscript_2(self, lower_opt, colon_loc, upper_opt, step_opt):
         loc = colon_loc
         if lower_opt:
             loc = loc.join(lower_opt.loc)
@@ -1065,27 +1152,11 @@ class Parser:
         return ast.Slice(lower=lower_opt, upper=upper_opt, step=step,
                          loc=loc, bound_colon_loc=colon_loc, step_colon_loc=step_colon_loc)
 
-    subscript_3_inner = Expect(Seq(Opt(Rule('test')), Opt(Rule('sliceop'))))
+    @action(Rule('test'))
+    def subscript_3(self, expr):
+        return ast.Index(value=expr, loc=expr.loc)
 
-    def subscript(self):
-        """subscript: '.' '.' '.' | test | [test] ':' [test] [sliceop]"""
-        # This requires manual disambiguation of `test | [test] ...`
-        result = self.subscript_1()
-        if result is not unmatched:
-            return result
-
-        result = self.test()
-        if result is unmatched:
-            return unmatched
-
-        result_1 = self._accept(':')
-        if result_1 is unmatched:
-            return self.subscript_2(result)
-
-        result_2 = self.subscript_3_inner()
-        return self.subscript_3(result, result_1.loc, *result_2)
-    subscript.expected = \
-        lambda parser: parser.subscript_1.expected(parser) + parser.test.expected(parser)
+    subscript = Alt(subscript_1, subscript_2, subscript_3)
 
     sliceop = Seq(Loc(':'), Opt(Rule('test')))
     """sliceop: ':' [test]"""
@@ -1123,9 +1194,13 @@ class Parser:
                             name_loc=name_tok.loc, colon_loc=colon_loc,
                             loc=class_loc.join(body[-1].loc))
 
+    @action(Rule('argument'))
+    def arglist_1(self, arg):
+        return [arg], self._empty_arglist()
+
     @action(Seq(Loc('*'), Rule('test'), Star(SeqN(1, Tok(','), Rule('argument'))),
                 Opt(Seq(Tok(','), Loc('**'), Rule('test')))))
-    def arglist_1(self, star_loc, stararg, postargs, kwarg_opt):
+    def arglist_2(self, star_loc, stararg, postargs, kwarg_opt):
         dstar_loc = kwarg = None
         if kwarg_opt:
             _, dstar_loc, kwarg = kwarg_opt
@@ -1136,83 +1211,67 @@ class Parser:
                     "error", "only named arguments may follow *expression", {}, postarg.loc)
                 raise diagnostic.DiagnosticException(error)
 
-        return ast.Call(starargs=stararg, kwargs=kwarg, keywords=postargs,
+        return postargs, \
+               ast.Call(args=[], keywords=[], starargs=stararg, kwargs=kwarg,
                         star_loc=star_loc, dstar_loc=dstar_loc, loc=None)
 
     @action(Seq(Loc('**'), Rule('test')))
-    def arglist_2(self, dstar_loc, kwarg):
-        return ast.Call(starargs=None, kwargs=kwarg, keywords=[],
+    def arglist_3(self, dstar_loc, kwarg):
+        return [], \
+               ast.Call(args=[], keywords=[], starargs=None, kwargs=kwarg,
                         star_loc=None, dstar_loc=dstar_loc, loc=None)
 
-    arglist_3 = Alt(arglist_1, arglist_2)
+    @action(SeqN(0, Rule('argument'), Tok(',')))
+    def arglist_4(self, arg):
+        return [], ([arg], self._empty_arglist())
 
-    def arglist(self):
+    @action(Alt(Seq(Star(SeqN(0, Rule('argument'), Tok(','))),
+                    Alt(arglist_1, arglist_2, arglist_3)),
+                arglist_4))
+    def arglist(self, pre_args, rest):
+        # Python's grammar is very awkwardly formulated here in a way
+        # that is not easily amenable to our combinator approach.
+        # Thus it is changed to the equivalent:
+        #
+        #     arglist: (argument ',')* ( argument | ... ) | argument ','
+        #
         """arglist: (argument ',')* (argument [','] |
                                      '*' test (',' argument)* [',' '**' test] |
                                      '**' test)"""
-        # Requires manual disambiguation between `argument ','` and `argument ')'`.
-        args, keywords = [], []
-        while True:
-            result = self.argument()
-            if result is unmatched:
-                break
+        post_args, call = rest
 
-            if isinstance(result, ast.keyword):
-                keywords.append(result)
-            else:
-                args.append(result)
-
-            result = self._accept(',')
-            if result is unmatched:
-                break
-
-        call = self.arglist_3()
-        if call is unmatched:
-            call = ast.Call(args=args, keywords=keywords, starargs=None, kwargs=None,
-                            star_loc=None, dstar_loc=None, loc=None)
-        else:
-            call.args = args
-            call.keywords = keywords + call.keywords
-
-        return call
-    arglist.expected = \
-        lambda self: self.argument.expected(self) + self.arglist_3.expected(self)
-
-    argument_1 = Seq(Loc('='), Rule('test'))
-
-    def argument(self):
-        """argument: test [gen_for] | test '=' test  # Really [keyword '='] test"""
-        # Requires manual disambiguation between `[gen_for]` and `'='`
-        lhs = None
-        result = self.test()
-        if result is unmatched:
-            return unmatched
-        else:
-            lhs = result
-
-        gen = equals_loc = rhs = None
-        result = self.gen_for()
-        if result is unmatched:
-            result = self.argument_1()
-            if result is not unmatched:
-                equals_loc, rhs = result
-        else:
-            gen = result
-
-        if gen:
-            gen.elt = lhs
-            return gen
-        elif rhs:
-            if not isinstance(lhs, ast.Name):
+        for arg in pre_args + post_args:
+            if isinstance(arg, ast.keyword):
+                call.keywords.append(arg)
+            elif len(call.args) > 0:
                 error = diagnostic.Diagnostic(
-                    "error", "keyword must be an identifier", {}, lhs.loc)
+                    "error", "non-keyword arg after keyword arg", {}, arg.loc)
                 raise diagnostic.DiagnosticException(error)
-            return ast.keyword(arg=lhs.id, value=rhs,
-                               loc=lhs.loc.join(rhs.loc),
-                               arg_loc=lhs.loc, equals_loc=equals_loc)
-        else:
-            return lhs
-    argument.expected = test.expected
+            else:
+                call.args.append(arg)
+        return call
+
+    @action(Seq(Rule('test'), Loc('='), Rule('test')))
+    def argument_1(self, lhs, equals_loc, rhs):
+        if not isinstance(lhs, ast.Name):
+            error = diagnostic.Diagnostic(
+                "error", "keyword must be an identifier", {}, lhs.loc)
+            raise diagnostic.DiagnosticException(error)
+        return ast.keyword(arg=lhs.id, value=rhs,
+                           loc=lhs.loc.join(rhs.loc),
+                           arg_loc=lhs.loc, equals_loc=equals_loc)
+
+    @action(Seq(Rule('test'), Opt(Rule('gen_for'))))
+    def argument_2(self, lhs, compose_opt):
+        if compose_opt:
+            generators = compose_opt([])
+            return ast.GeneratorExp(elt=lhs, generators=generators,
+                                    begin_loc=None, end_loc=None,
+                                    loc=lhs.loc.join(generators[-1].loc))
+        return lhs
+
+    argument = Alt(argument_1, argument_2)
+    """argument: test [gen_for] | test '=' test  # Really [keyword '='] test"""
 
     list_iter = Alt(Rule("list_for"), Rule("list_if"))
     """list_iter: list_for | list_if"""

@@ -141,7 +141,7 @@ class Lexer:
         ( # 1
             (\\)? # ?2 line continuation
             ([\n]|[\r][\n]|[\r]) # 3 newline
-        |   (\#.+) # 4 comment
+        |   (\#.*) # 4 comment
         |   ( # 5 floating point or complex literal
                 (?: [0-9]* \.  [0-9]+
                 |   [0-9]+ \.?

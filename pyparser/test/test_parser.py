@@ -349,12 +349,12 @@ class ParserTestCase(unittest.TestCase):
             "~~~~~~ loc"
             "  ~~ ops.0.loc")
 
-        # self.assertParsesExpr(
-        #     {'ty': 'Compare', 'ops': [{'ty': 'NotIs'}],
-        #      'left': self.ast_1, 'comparators': [self.ast_1]},
-        #     "1 is not 1",
-        #     "~~~~~~~~~~ loc"
-        #     "  ~~~~~~ ops.0.loc")
+        self.assertParsesExpr(
+            {'ty': 'Compare', 'ops': [{'ty': 'IsNot'}],
+             'left': self.ast_1, 'comparators': [self.ast_1]},
+            "1 is not 1",
+            "~~~~~~~~~~ loc"
+            "  ~~~~~~ ops.0.loc")
 
     def test_compare_multi(self):
         self.assertParsesExpr(
@@ -598,27 +598,41 @@ class ParserTestCase(unittest.TestCase):
             "~~~~~~~~~ loc")
 
         self.assertParsesExpr(
+            {'ty': 'Call', 'func': self.ast_x, 'starargs': None, 'kwargs': None,
+             'args': [self.ast_y], 'keywords': []},
+            "x(y,)",
+            "~~~~~ loc")
+
+        self.assertParsesExpr(
             {'ty': 'Call', 'func': self.ast_x, 'starargs': self.ast_y, 'kwargs': None,
              'args': [], 'keywords': []},
             "x(*y)",
             "  ^ star_loc"
             "~~~~~ loc")
 
-        # self.assertParsesExpr(
-        #     {'ty': 'Call', 'func': self.ast_x, 'starargs': self.ast_y, 'kwargs': self.ast_z,
-        #      'args': [], 'keywords': []},
-        #     "x(*y, **z)",
-        #     "  ^ star_loc"
-        #     "      ^^ dstar_loc"
-        #     "~~~~~~~~~~ loc")
+        self.assertParsesExpr(
+            {'ty': 'Call', 'func': self.ast_x, 'starargs': self.ast_y, 'kwargs': self.ast_z,
+             'args': [], 'keywords': []},
+            "x(*y, **z)",
+            "  ^ star_loc"
+            "      ^^ dstar_loc"
+            "~~~~~~~~~~ loc")
 
-        # self.assertParsesExpr(
-        #     {'ty': 'Call', 'func': self.ast_x, 'starargs': self.ast_y, 'kwargs': self.ast_z,
-        #      'args': [self.ast_t], 'keywords': []},
-        #     "x(*y, t, **z)",
-        #     "  ^ star_loc"
-        #     "         ^^ dstar_loc"
-        #     "~~~~~~~~~~~~~ loc")
+        self.assertParsesExpr(
+            {'ty': 'Call', 'func': self.ast_x, 'starargs': self.ast_y, 'kwargs': self.ast_z,
+             'args': [], 'keywords': [{'ty': 'keyword', 'arg': 't', 'value': self.ast_t}]},
+            "x(*y, t=t, **z)",
+            "  ^ star_loc"
+            "           ^^ dstar_loc"
+            "~~~~~~~~~~~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Call', 'func': self.ast_x, 'starargs': self.ast_z, 'kwargs': self.ast_t,
+             'args': [self.ast_y], 'keywords': []},
+            "x(y, *z, **t)",
+            "     ^ star_loc"
+            "         ^^ dstar_loc"
+            "~~~~~~~~~~~~~ loc")
 
         self.assertParsesExpr(
             {'ty': 'Call', 'func': self.ast_x, 'starargs': None, 'kwargs': self.ast_z,
@@ -626,6 +640,16 @@ class ParserTestCase(unittest.TestCase):
             "x(**z)",
             "  ^^ dstar_loc"
             "~~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Call', 'func': self.ast_x, 'starargs': None, 'kwargs': None,
+             'keywords': [], 'args': [
+                {'ty': 'GeneratorExp', 'elt': self.ast_y, 'generators': [
+                    {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y, 'ifs': []}
+                ]}
+            ]},
+            "x(y for y in z)",
+            "")
 
     def test_subscript(self):
         self.assertParsesExpr(
@@ -647,13 +671,21 @@ class ParserTestCase(unittest.TestCase):
             "  ~~~~ slice.loc"
             "~~~~~~~ loc")
 
-        # self.assertParsesExpr(
-        #     {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
-        #      'slice': {'ty': 'Slice', 'lower': self.ast_1, 'upper': None, 'step': None}},
-        #     "x[:1]",
-        #     "  ^ slice.bound_colon_loc"
-        #     "  ~~ slice.loc"
-        #     "~~~~~ loc")
+        self.assertParsesExpr(
+            {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
+             'slice': {'ty': 'Slice', 'lower': self.ast_1, 'upper': None, 'step': None}},
+            "x[1:]",
+            "   ^ slice.bound_colon_loc"
+            "  ~~ slice.loc"
+            "~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
+             'slice': {'ty': 'Slice', 'lower': None, 'upper': self.ast_1, 'step': None}},
+            "x[:1]",
+            "  ^ slice.bound_colon_loc"
+            "  ~~ slice.loc"
+            "~~~~~ loc")
 
         self.assertParsesExpr(
             {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
@@ -982,13 +1014,13 @@ class ParserTestCase(unittest.TestCase):
             "                ^ 0.names.0.loc"
             "~~~~~~~~~~~~~~~~~ 0.loc")
 
-        # self.assertParsesSuite(
-        #     [{'ty': 'ImportFrom', 'names': [
-        #         {'ty': 'alias', 'name': 'foo', 'asname': None}
-        #     ], 'module': None, 'level': 2}],
-        #     "from .. import foo",
-        #     "     ~~ 0.dots_loc"
-        #     "~~~~~~~~~~~~~~~~~~ 0.loc")
+        self.assertParsesSuite(
+            [{'ty': 'ImportFrom', 'names': [
+                {'ty': 'alias', 'name': 'foo', 'asname': None}
+            ], 'module': None, 'level': 2}],
+            "from .. import foo",
+            "     ~~ 0.dots_loc"
+            "~~~~~~~~~~~~~~~~~~ 0.loc")
 
     def test_global(self):
         self.assertParsesSuite(
@@ -1242,6 +1274,17 @@ class ParserTestCase(unittest.TestCase):
             "^ 0.at_locs.0"
             " ^ 0.decorator_list.0.loc"
             "~~~~~~~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'ClassDef', 'name': 'x', 'bases': [],
+              'body': [{'ty': 'Pass'}], 'decorator_list': [
+                {'ty': 'Call', 'func': self.ast_x,
+                 'args': [], 'keywords': [], 'kwargs': None, 'starargs': None}
+            ]}],
+            "@x()·class x:·  pass",
+            "^ 0.at_locs.0"
+            " ~~~ 0.decorator_list.0.loc"
+            "~~~~~~~~~~~~~~~~~~~~ 0.loc")
 
         self.assertParsesSuite(
             [{'ty': 'ClassDef', 'name': 'x', 'bases': [],

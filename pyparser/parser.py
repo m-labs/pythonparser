@@ -1386,3 +1386,13 @@ class Parser:
 
 def for_code(code, version=(2,7)):
     return Parser(lexer.Lexer(source.Buffer(code), version))
+
+if __name__ == "__main__":
+    import sys, time, codecs
+    for filename in sys.argv[1:]:
+        with codecs.open(filename, encoding='utf-8') as f:
+            start = time.time()
+            ast = for_code(f.read()).file_input()
+            interval = time.time() - start
+            print(ast)
+            print("elapsed: %.2f" % interval, file=sys.stderr)

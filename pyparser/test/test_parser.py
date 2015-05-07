@@ -3,7 +3,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 from .. import source, lexer, diagnostic, ast, coverage
 from ..coverage import parser
-import unittest, sys, re
+import unittest, sys, re, ast as pyast
 
 if sys.version_info >= (3,):
     def unicode(x): return x
@@ -51,6 +51,21 @@ class ParserTestCase(unittest.TestCase):
             flat_node[unicode(field)] = value
         return flat_node
 
+    def flatten_python_ast(self, node):
+        flat_node = { 'ty': unicode(type(node).__name__) }
+        for field in node._fields:
+            if field == 'ctx':
+                flat_node['ctx'] = None
+                continue
+
+            value = getattr(node, field)
+            if isinstance(value, ast.AST):
+                value = self.flatten_python_ast(value)
+            if isinstance(value, list) and len(value) > 0 and isinstance(value[0], ast.AST):
+                value = list(map(self.flatten_python_ast, value))
+            flat_node[unicode(field)] = value
+        return flat_node
+
     _loc_re  = re.compile(r"\s*([~^]*)<?\s+([a-z_0-9.]+)")
     _path_re = re.compile(r"(([a-z_]+)|([0-9]+))(\.)?")
 
@@ -92,26 +107,35 @@ class ParserTestCase(unittest.TestCase):
             matcher_pos = matcher_match.end(0)
 
     def _assertParsesGen(self, expected_flat_ast, code,
-                         loc_matcher="", ast_slicer=lambda x: (0, x)):
+                         loc_matcher="", ast_slicer=lambda x: (0, x),
+                         validate_if=lambda: True):
         ast = self.parser_for(code + "\n").file_input()
         flat_ast = self.flatten_ast(ast)
+        python_ast = pyast.parse(code.replace("·", "\n") + "\n")
+        flat_python_ast = self.flatten_python_ast(python_ast)
         self.assertEqual({'ty': 'Module', 'body': expected_flat_ast},
                          flat_ast)
+        if validate_if():
+            self.assertEqual({'ty': 'Module', 'body': expected_flat_ast},
+                             flat_python_ast)
         self.match_loc(ast, loc_matcher, ast_slicer)
 
-    def assertParsesSuite(self, expected_flat_ast, code, loc_matcher=""):
+    def assertParsesSuite(self, expected_flat_ast, code, loc_matcher="", **kwargs):
         self._assertParsesGen(expected_flat_ast, code,
-                              loc_matcher, lambda x: (0, x.body))
+                              loc_matcher, lambda x: (0, x.body),
+                              **kwargs)
 
-    def assertParsesExpr(self, expected_flat_ast, code, loc_matcher=""):
+    def assertParsesExpr(self, expected_flat_ast, code, loc_matcher="", **kwargs):
         self._assertParsesGen([{'ty': 'Expr', 'value': expected_flat_ast}], code,
-                              loc_matcher, lambda x: (0, x.body[0].value))
+                              loc_matcher, lambda x: (0, x.body[0].value),
+                              **kwargs)
 
-    def assertParsesArgs(self, expected_flat_ast, code, loc_matcher=""):
+    def assertParsesArgs(self, expected_flat_ast, code, loc_matcher="", **kwargs):
         self._assertParsesGen([{'ty': 'Expr', 'value': {'ty': 'Lambda', 'body': self.ast_1,
                                     'args': expected_flat_ast}}],
                               "lambda %s: 1" % code,
-                              loc_matcher, lambda x: (7, x.body[0].value.args))
+                              loc_matcher, lambda x: (7, x.body[0].value.args),
+                              **kwargs)
 
     def assertParsesToplevel(self, expected_flat_ast, code,
                              mode="file_input", interactive=False):
@@ -200,8 +224,8 @@ class ParserTestCase(unittest.TestCase):
             "~ op.loc")
 
         self.assertParsesExpr(
-            {'ty': 'UnaryOp', 'op': {'ty': 'USub'}, 'operand': self.ast_1},
-            "-1",
+            {'ty': 'UnaryOp', 'op': {'ty': 'USub'}, 'operand': self.ast_x},
+            "-x",
             "~~ loc"
             "~ op.loc")
 
@@ -669,10 +693,9 @@ class ParserTestCase(unittest.TestCase):
 
         self.assertParsesExpr(
             {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
-             'slice': {'ty': 'ExtSlice', 'dims': [
-                {'ty': 'Index', 'value': self.ast_1},
-                {'ty': 'Index', 'value': self.ast_2},
-             ]}},
+             'slice': {'ty': 'Index', 'value': {'ty': 'Tuple', 'ctx': None, 'elts': [
+                self.ast_1, self.ast_2
+            ]}}},
             "x[1, 2]",
             "  ~~~~ slice.loc"
             "~~~~~~~ loc")
@@ -703,12 +726,24 @@ class ParserTestCase(unittest.TestCase):
 
         self.assertParsesExpr(
             {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
+             'slice': {'ty': 'ExtSlice', 'dims': [
+                {'ty': 'Slice', 'lower': self.ast_1, 'upper': self.ast_2, 'step': None},
+                {'ty': 'Index', 'value': self.ast_2},
+             ]}},
+            "x[1:2, 2]",
+            "  ~~~~~~ slice.loc"
+            "~~~~~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
              'slice': {'ty': 'Slice', 'lower': self.ast_1, 'upper': self.ast_2, 'step': None}},
             "x[1:2:]",
             "   ^ slice.bound_colon_loc"
             "     ^ slice.step_colon_loc"
             "  ~~~~ slice.loc"
-            "~~~~~~~ loc")
+            "~~~~~~~ loc",
+            # A Python bug places ast.Name(id='None') instead of None in step on <3.0
+            validate_if=lambda: sys.version_info[0] > 2)
 
         self.assertParsesExpr(
             {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
@@ -839,19 +874,19 @@ class ParserTestCase(unittest.TestCase):
 
     def test_print(self):
         self.assertParsesSuite(
-            [{'ty': 'Print', 'dest': None, 'values': [self.ast_1], 'nl': False}],
+            [{'ty': 'Print', 'dest': None, 'values': [self.ast_1], 'nl': True}],
             "print 1",
             "~~~~~ 0.keyword_loc"
             "~~~~~~~ 0.loc")
 
         self.assertParsesSuite(
-            [{'ty': 'Print', 'dest': None, 'values': [self.ast_1], 'nl': True}],
+            [{'ty': 'Print', 'dest': None, 'values': [self.ast_1], 'nl': False}],
             "print 1,",
             "~~~~~ 0.keyword_loc"
             "~~~~~~~~ 0.loc")
 
         self.assertParsesSuite(
-            [{'ty': 'Print', 'dest': self.ast_2, 'values': [self.ast_1], 'nl': False}],
+            [{'ty': 'Print', 'dest': self.ast_2, 'values': [self.ast_1], 'nl': True}],
             "print >>2, 1",
             "~~~~~ 0.keyword_loc"
             "      ~~ 0.dest_loc"
@@ -859,10 +894,16 @@ class ParserTestCase(unittest.TestCase):
 
     def test_del(self):
         self.assertParsesSuite(
-            [{'ty': 'Delete', 'targets': self.ast_x}],
+            [{'ty': 'Delete', 'targets': [self.ast_x]}],
             "del x",
             "~~~ 0.keyword_loc"
             "~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Delete', 'targets': [self.ast_x, self.ast_y]}],
+            "del x, y",
+            "~~~ 0.keyword_loc"
+            "~~~~~~~~ 0.loc")
 
     def test_pass(self):
         self.assertParsesSuite(
@@ -1039,20 +1080,20 @@ class ParserTestCase(unittest.TestCase):
 
     def test_exec(self):
         self.assertParsesSuite(
-            [{'ty': 'Exec', 'body': self.ast_1, 'locals': None, 'globals': None}],
+            [{'ty': 'Exec', 'body': self.ast_1, 'globals': None, 'locals': None}],
             "exec 1",
             "~~~~ 0.keyword_loc"
             "~~~~~~ 0.loc")
 
         self.assertParsesSuite(
-            [{'ty': 'Exec', 'body': self.ast_1, 'locals': self.ast_2, 'globals': None}],
+            [{'ty': 'Exec', 'body': self.ast_1, 'globals': self.ast_2, 'locals': None}],
             "exec 1 in 2",
             "~~~~ 0.keyword_loc"
             "       ~~ 0.in_loc"
             "~~~~~~~~~~~ 0.loc")
 
         self.assertParsesSuite(
-            [{'ty': 'Exec', 'body': self.ast_1, 'locals': self.ast_2, 'globals': self.ast_3}],
+            [{'ty': 'Exec', 'body': self.ast_1, 'globals': self.ast_2, 'locals': self.ast_3}],
             "exec 1 in 2, 3",
             "~~~~ 0.keyword_loc"
             "       ~~ 0.in_loc"
@@ -1146,7 +1187,7 @@ class ParserTestCase(unittest.TestCase):
 
     def test_try(self):
         self.assertParsesSuite(
-            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': None,
+            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [],
               'handlers': [
                 {'ty': 'ExceptHandler', 'type': None, 'name': None,
                  'body': [self.ast_expr_2]}
@@ -1160,7 +1201,7 @@ class ParserTestCase(unittest.TestCase):
             "~~~~~~~~~~~~~~~~~~~~ 0.loc")
 
         self.assertParsesSuite(
-            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': None,
+            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [],
               'handlers': [
                 {'ty': 'ExceptHandler', 'type': self.ast_y, 'name': None,
                  'body': [self.ast_expr_2]}
@@ -1168,7 +1209,7 @@ class ParserTestCase(unittest.TestCase):
             "try:·  1·except y:·  2")
 
         self.assertParsesSuite(
-            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': None,
+            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [],
               'handlers': [
                 {'ty': 'ExceptHandler', 'type': self.ast_y, 'name': self.ast_t,
                  'body': [self.ast_expr_2]}
@@ -1177,7 +1218,7 @@ class ParserTestCase(unittest.TestCase):
             "                  ~~ 0.handlers.0.as_loc")
 
         self.assertParsesSuite(
-            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': None,
+            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [],
               'handlers': [
                 {'ty': 'ExceptHandler', 'type': self.ast_y, 'name': self.ast_t,
                  'body': [self.ast_expr_2]}
@@ -1208,7 +1249,7 @@ class ParserTestCase(unittest.TestCase):
 
         self.assertParsesSuite(
             [{'ty': 'TryFinally', 'finalbody': [self.ast_expr_3], 'body': [
-                {'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': None, 'handlers': [
+                {'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [], 'handlers': [
                     {'ty': 'ExceptHandler', 'type': None, 'name': None,
                      'body': [self.ast_expr_2]}
                 ]}

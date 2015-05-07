@@ -591,14 +591,14 @@ class Parser:
     @action(List(Rule('test'), ',', trailing=True))
     def print_stmt_1(self, values):
         loc = values.trailing_comma.loc if values.trailing_comma else values[-1].loc
-        nl = True if values.trailing_comma else False
+        nl = False if values.trailing_comma else True
         return ast.Print(dest=None, values=values, nl=nl,
                          dest_loc=None, loc=loc)
 
     @action(Seq(Loc('>>'), Rule('test'), Tok(','), List(Rule('test'), ',', trailing=True)))
     def print_stmt_2(self, dest_loc, dest, comma_tok, values):
         loc = values.trailing_comma.loc if values.trailing_comma else values[-1].loc
-        nl = True if values.trailing_comma else False
+        nl = False if values.trailing_comma else True
         return ast.Print(dest=dest, values=values, nl=nl,
                          dest_loc=dest_loc, loc=loc)
 
@@ -613,11 +613,13 @@ class Parser:
         stmt.loc = print_loc.join(stmt.loc)
         return stmt
 
-    @action(Seq(Loc('del'), Rule('exprlist')))
+    @action(Seq(Loc('del'), List(Rule('expr'), ',', trailing=True)))
     def del_stmt(self, stmt_loc, exprs):
+        # Python uses exprlist here, but does *not* obey the usual
+        # tuple-wrapping semantics, so we embed the rule directly.
         """del_stmt: 'del' exprlist"""
-        return ast.Delete(targets=self._assignable(exprs),
-                          loc=stmt_loc.join(exprs.loc), keyword_loc=stmt_loc)
+        return ast.Delete(targets=list(map(self._assignable, exprs)),
+                          loc=stmt_loc.join(exprs[-1].loc), keyword_loc=stmt_loc)
 
     @action(Loc('pass'))
     def pass_stmt(self, stmt_loc):
@@ -772,14 +774,14 @@ class Parser:
                         Opt(SeqN(1, Loc(','), Rule('test')))))))
     def exec_stmt(self, exec_loc, body, in_opt):
         """exec_stmt: 'exec' expr ['in' test [',' test]]"""
-        in_loc, locals, globals = None, None, None
+        in_loc, globals, locals = None, None, None
         loc = exec_loc.join(body.loc)
         if in_opt:
-            in_loc, locals, globals = in_opt
-            if globals:
-                loc = loc.join(globals.loc)
-            else:
+            in_loc, globals, locals = in_opt
+            if locals:
                 loc = loc.join(locals.loc)
+            else:
+                loc = loc.join(globals.loc)
         return ast.Exec(body=body, locals=locals, globals=globals,
                         loc=loc, keyword_loc=exec_loc, in_loc=in_loc)
 
@@ -863,7 +865,7 @@ class Parser:
             handler.loc = handler.loc.join(handler.body[-1].loc)
             handlers.append(handler)
 
-        else_loc = else_colon_loc = orelse = None
+        else_loc, else_colon_loc, orelse = None, None, []
         loc = handlers[-1].loc
         if else_opt:
             else_loc, else_colon_loc, orelse = else_opt
@@ -1169,6 +1171,13 @@ class Parser:
         """subscriptlist: subscript (',' subscript)* [',']"""
         if len(subscripts) == 1:
             return ast.Subscript(slice=subscripts[0], ctx=None, loc=None)
+        elif all([isinstance(x, ast.Index) for x in subscripts]):
+            elts  = [x.value for x in subscripts]
+            loc   = subscripts[0].loc.join(subscripts[-1].loc)
+            index = ast.Index(value=ast.Tuple(elts=elts, ctx=None,
+                                              begin_loc=None, end_loc=None, loc=loc),
+                              loc=loc)
+            return ast.Subscript(slice=index, ctx=None, loc=None)
         else:
             extslice = ast.ExtSlice(dims=subscripts,
                                     loc=subscripts[0].loc.join(subscripts[-1].loc))

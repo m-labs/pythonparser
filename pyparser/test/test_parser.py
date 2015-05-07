@@ -55,7 +55,7 @@ class ParserTestCase(unittest.TestCase):
     _path_re = re.compile(r"(([a-z_]+)|([0-9]+))(\.)?")
 
     def match_loc(self, ast, matcher, root=lambda x: x):
-        ast = root(ast)
+        offset, ast = root(ast)
 
         matcher_pos = 0
         while matcher_pos < len(matcher):
@@ -64,8 +64,8 @@ class ParserTestCase(unittest.TestCase):
                 raise Exception("invalid location matcher %s" % matcher[matcher_pos:])
 
             range = source.Range(self.source_buffer,
-                matcher_match.start(1) - matcher_pos,
-                matcher_match.end(1) - matcher_pos)
+                matcher_match.start(1) - matcher_pos + offset,
+                matcher_match.end(1) - matcher_pos + offset)
             path = matcher_match.group(2)
 
             path_pos = 0
@@ -91,25 +91,32 @@ class ParserTestCase(unittest.TestCase):
 
             matcher_pos = matcher_match.end(0)
 
-    def assertParsesGen(self, expected_flat_ast, code):
+    def _assertParsesGen(self, expected_flat_ast, code,
+                         loc_matcher="", ast_slicer=lambda x: (0, x)):
         ast = self.parser_for(code + "\n").file_input()
         flat_ast = self.flatten_ast(ast)
         self.assertEqual({'ty': 'Module', 'body': expected_flat_ast},
                          flat_ast)
-        return ast
+        self.match_loc(ast, loc_matcher, ast_slicer)
 
     def assertParsesSuite(self, expected_flat_ast, code, loc_matcher=""):
-        ast = self.assertParsesGen(expected_flat_ast, code)
-        self.match_loc(ast, loc_matcher, lambda x: x.body)
+        self._assertParsesGen(expected_flat_ast, code,
+                              loc_matcher, lambda x: (0, x.body))
 
     def assertParsesExpr(self, expected_flat_ast, code, loc_matcher=""):
-        ast = self.assertParsesGen([{'ty': 'Expr', 'value': expected_flat_ast}], code)
-        self.match_loc(ast, loc_matcher, lambda x: x.body[0].value)
+        self._assertParsesGen([{'ty': 'Expr', 'value': expected_flat_ast}], code,
+                              loc_matcher, lambda x: (0, x.body[0].value))
 
-    def assertParsesToplevel(self, expected_flat_ast, code, loc_matcher, mode, interactive):
+    def assertParsesArgs(self, expected_flat_ast, code, loc_matcher=""):
+        self._assertParsesGen([{'ty': 'Expr', 'value': {'ty': 'Lambda', 'body': self.ast_1,
+                                    'args': expected_flat_ast}}],
+                              "lambda %s: 1" % code,
+                              loc_matcher, lambda x: (7, x.body[0].value.args))
+
+    def assertParsesToplevel(self, expected_flat_ast, code,
+                             mode="file_input", interactive=False):
         ast = getattr(self.parser_for(code, interactive=interactive), mode)()
         self.assertEqual(expected_flat_ast, self.flatten_ast(ast))
-        self.match_loc(ast, loc_matcher, lambda x: x.body)
 
     def assertDiagnoses(self, code, diag):
         try:
@@ -648,8 +655,7 @@ class ParserTestCase(unittest.TestCase):
                     {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y, 'ifs': []}
                 ]}
             ]},
-            "x(y for y in z)",
-            "")
+            "x(y for y in z)")
 
     def test_subscript(self):
         self.assertParsesExpr(
@@ -1159,8 +1165,7 @@ class ParserTestCase(unittest.TestCase):
                 {'ty': 'ExceptHandler', 'type': self.ast_y, 'name': None,
                  'body': [self.ast_expr_2]}
             ]}],
-            "try:·  1·except y:·  2",
-            "")
+            "try:·  1·except y:·  2")
 
         self.assertParsesSuite(
             [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': None,
@@ -1308,22 +1313,107 @@ class ParserTestCase(unittest.TestCase):
             "~~~~~~~~~~~~~~~~~~ 0.loc")
 
     #
+    # FUNCTION AND LAMBDA ARGUMENTS
+    #
+
+    def test_args(self):
+        self.assertParsesArgs(
+            {'ty': 'arguments', 'args': [], 'defaults': [],
+             'vararg': None, 'kwarg': None},
+            "")
+
+        self.assertParsesArgs(
+            {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],
+             'vararg': None, 'kwarg': None},
+            "x",
+            "~ args.0.loc"
+            "~ loc")
+
+        self.assertParsesArgs(
+            {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [self.ast_1],
+             'vararg': None, 'kwarg': None},
+            "x=1",
+            "~ args.0.loc"
+            " ~ equals_locs.0"
+            "  ~ defaults.0.loc"
+            "~~~ loc")
+
+        self.assertParsesArgs(
+            {'ty': 'arguments', 'args': [self.ast_x, self.ast_y], 'defaults': [],
+             'vararg': None, 'kwarg': None},
+            "x, y",
+            "~~~~ loc")
+
+        self.assertParsesArgs(
+            {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],
+             'vararg': 'y', 'kwarg': None},
+            "x, *y",
+            "   ^ star_loc"
+            "    ~ vararg_loc"
+            "~~~~~ loc")
+
+        self.assertParsesArgs(
+            {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],
+             'vararg': None, 'kwarg': 'y'},
+            "x, **y",
+            "   ^^ dstar_loc"
+            "     ~ kwarg_loc"
+            "~~~~~~ loc")
+
+        self.assertParsesArgs(
+            {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],
+             'vararg': 'y', 'kwarg': 'z'},
+            "x, *y, **z",
+            "   ^ star_loc"
+            "    ~ vararg_loc"
+            "       ^^ dstar_loc"
+            "         ~ kwarg_loc"
+            "~~~~~~~~~~ loc")
+
+        self.assertParsesArgs(
+            {'ty': 'arguments', 'defaults': [], 'vararg': None, 'kwarg': None,
+             'args': [{'ty': 'Tuple', 'ctx': None, 'elts': [self.ast_x, self.ast_y]}]},
+            "(x,y)",
+            "^ args.0.begin_loc"
+            "    ^ args.0.end_loc"
+            "~~~~~ args.0.loc"
+            "~~~~~ loc")
+
+    def test_args_def(self):
+        self.assertParsesSuite(
+            [{'ty': 'FunctionDef', 'name': 'foo',
+              'args': {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],
+                       'kwarg': None, 'vararg': None},
+              'body': [{'ty': 'Pass'}], 'decorator_list': []}],
+            "def foo(x):·  pass")
+
+    def test_args_oldlambda(self):
+        self.assertParsesExpr(
+            {'ty': 'ListComp', 'elt': self.ast_x, 'generators': [
+                {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y,
+                 'ifs': [{'ty': 'Lambda',
+                     'args': {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],
+                              'kwarg': None, 'vararg': None},
+                     'body': self.ast_t}
+                ]}
+            ]},
+            "[x for y in z if lambda x: t]")
+
+    #
     # PARSING MODES
     #
 
     def test_single_input(self):
         self.assertParsesToplevel(
             {'ty': 'Interactive', 'body': []},
-            "\n",
-            "",
+            "·",
             mode='single_input', interactive=True)
 
         self.assertParsesToplevel(
             {'ty': 'Interactive', 'body': [
                 {'ty': 'Expr', 'value': self.ast_1}
             ]},
-            "1\n",
-            "",
+            "1·",
             mode='single_input', interactive=True)
 
         self.assertParsesToplevel(
@@ -1332,20 +1422,17 @@ class ParserTestCase(unittest.TestCase):
                     {'ty': 'Expr', 'value': self.ast_1}
                 ], 'orelse': []}
             ]},
-            "if x: 1\n\n",
-            "",
+            "if x: 1··",
             mode='single_input', interactive=True)
 
     def test_file_input(self):
         self.assertParsesToplevel(
             {'ty': 'Module', 'body': []},
-            "\n",
-            "",
+            "·",
             mode='file_input', interactive=True)
 
     def test_eval_input(self):
         self.assertParsesToplevel(
             {'ty': 'Expression', 'body': [self.ast_1]},
-            "1\n",
-            "",
+            "1·",
             mode='eval_input', interactive=True)

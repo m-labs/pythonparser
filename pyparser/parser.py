@@ -392,7 +392,7 @@ class Parser:
     def _empty_arguments(self):
         return ast.arguments(args=[], defaults=[], vararg=None, kwarg=None,
                              star_loc=None, vararg_loc=None, dstar_loc=None, kwarg_loc=None,
-                             default_equals_locs=[], begin_loc=None, end_loc=None, loc=None)
+                             equals_locs=[], begin_loc=None, end_loc=None, loc=None)
 
     def _empty_arglist(self):
         return ast.Call(args=[], keywords=[], starargs=None, kwargs=None,
@@ -464,36 +464,78 @@ class Parser:
     parameters = BeginEnd('(', parameters_1, ')')
     """parameters: '(' [varargslist] ')'"""
 
+    varargslist_1 = Seq(Rule('fpdef'), Opt(Seq(Loc('='), Rule('test'))))
+
     @action(Seq(Loc('**'), Tok('ident')))
-    def varargslist_1(self, dstar_loc, kwarg_tok):
-        return ast.arguments(vararg=None, kwarg=kwarg_tok.value,
+    def varargslist_2(self, dstar_loc, kwarg_tok):
+        return ast.arguments(args=[], defaults=[], vararg=None, kwarg=kwarg_tok.value,
                              star_loc=None, vararg_loc=None,
-                             dstar_loc=dstar_loc, kwarg_loc=kwarg_tok.loc)
+                             dstar_loc=dstar_loc, kwarg_loc=kwarg_tok.loc,
+                             begin_loc=None, end_loc=None, equals_locs=[], loc=kwarg_tok.loc)
 
     @action(Seq(Loc('*'), Tok('ident'),
-                Opt(Seq(Loc('**'), Tok('ident')))))
-    def varargslist_2(self, star_loc, vararg_tok, kwarg_opt):
-        dstar_loc, kwarg, kwarg_loc = None
+                Opt(Seq(Tok(','), Loc('**'), Tok('ident')))))
+    def varargslist_3(self, star_loc, vararg_tok, kwarg_opt):
+        dstar_loc = kwarg = kwarg_loc = None
+        loc = vararg_tok.loc
         if kwarg_opt:
-            dstar_loc, kwarg, kwarg_loc = kwarg_opt
-        return ast.arguments(vararg=vararg_tok.value, kwarg=kwarg,
+            _, dstar_loc, kwarg_tok = kwarg_opt
+            kwarg, kwarg_loc = kwarg_tok.value, kwarg_tok.loc
+            loc = kwarg_tok.loc
+        return ast.arguments(args=[], defaults=[], vararg=vararg_tok.value, kwarg=kwarg,
                              star_loc=star_loc, vararg_loc=vararg_tok.loc,
-                             dstar_loc=dstar_loc, kwarg_loc=kwarg_loc)
+                             dstar_loc=dstar_loc, kwarg_loc=kwarg_loc,
+                             begin_loc=None, end_loc=None, equals_locs=[], loc=loc)
 
-    varargslist = Tok('no')
-    """varargslist: ((fpdef ['=' test] ',')*
-                     ('*' NAME [',' '**' NAME] | '**' NAME) |
-                     fpdef ['=' test] (',' fpdef ['=' test])* [','])"""
+    @action(Eps(value=()))
+    def varargslist_4(self):
+        return self._empty_arguments()
+
+    @action(Alt(Seq(Star(SeqN(0, varargslist_1, Tok(','))),
+                    Alt(varargslist_2, varargslist_3)),
+                Seq(List(varargslist_1, ',', trailing=True),
+                    varargslist_4)))
+    def varargslist(self, fparams, args):
+        """varargslist: ((fpdef ['=' test] ',')*
+                         ('*' NAME [',' '**' NAME] | '**' NAME) |
+                         fpdef ['=' test] (',' fpdef ['=' test])* [','])"""
+        for fparam, default_opt in fparams:
+            args.args.append(fparam)
+            if default_opt:
+                equals_loc, default = default_opt
+                args.equals_locs.append(equals_loc)
+                args.defaults.append(default)
+            elif len(args.defaults) > 0:
+                error = diagnostic.Diagnostic(
+                    "error", "non-default argument follows default argument", {}, fparam.loc)
+                raise diagnostic.DiagnosticException(error)
+
+        def fparam_loc(fparam, default_opt):
+            if default_opt:
+                equals_loc, default = default_opt
+                return fparam.loc.join(default.loc)
+            else:
+                return fparam.loc
+
+        if args.loc is None:
+            args.loc = fparam_loc(*fparams[0]).join(fparam_loc(*fparams[-1]))
+        else:
+            args.loc = args.loc.join(fparam_loc(*fparams[0]))
+
+        return args
 
     @action(Tok('ident'))
-    def fpdef_1(ident_tok):
-        return ast.Name(id=ident_tok.value, loc=ident_tok.loc)
+    def fpdef_1(self, ident_tok):
+        return ast.Name(id=ident_tok.value, loc=ident_tok.loc, ctx=None)
 
-    fpdef = Alt(fpdef_1, BeginEnd('(', Rule('fplist'), ')'))
+    fpdef = Alt(fpdef_1, BeginEnd('(', Rule('fplist'), ')',
+                                  empty=lambda: ast.Tuple(elts=[], ctx=None, loc=None)))
     """fpdef: NAME | '(' fplist ')'"""
 
-    fplist = List(Rule('fpdef'), ',', trailing=True)
-    """fplist: fpdef (',' fpdef)* [',']"""
+    @action(List(Rule('fpdef'), ',', trailing=True))
+    def fplist(self, elts):
+        """fplist: fpdef (',' fpdef)* [',']"""
+        return ast.Tuple(elts=elts, ctx=None, loc=None)
 
     stmt = Alt(Rule('simple_stmt'), Rule('compound_stmt'))
     """stmt: simple_stmt | compound_stmt"""

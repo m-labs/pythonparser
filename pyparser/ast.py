@@ -89,10 +89,10 @@ class arguments(beginendloc, ast.arguments):
     :ivar vararg_loc: location of splat formal argument, if any
     :ivar dstar_loc: location of ``**``, if any
     :ivar kwarg_loc: location of keyword splat formal argument, if any
-    :ivar default_equals_locs: locations of ``=``
+    :ivar equals_locs: locations of ``=``
     """
     _locs = beginendloc._locs + ('star_loc', 'vararg_loc', 'dstar_loc',
-                                 'vararg_loc', 'kwarg_loc', 'default_equals_locs')
+                                 'vararg_loc', 'kwarg_loc', 'equals_locs')
 
 class boolop:
     """

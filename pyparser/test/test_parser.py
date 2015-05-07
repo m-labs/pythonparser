@@ -206,6 +206,13 @@ class ParserTestCase(unittest.TestCase):
             "^ begin_loc"
             "    ^ end_loc")
 
+        self.assertParsesExpr(
+            {'ty': 'Str', 's': 'foobar'},
+            "'foo' 'bar'",
+            "~~~~~~~~~~~ loc"
+            "^ begin_loc"
+            "          ^ end_loc")
+
     def test_ident(self):
         self.assertParsesExpr(
             {'ty': 'Name', 'id': 'foo', 'ctx': None},

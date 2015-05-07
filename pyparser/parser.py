@@ -1075,24 +1075,29 @@ class Parser:
                              loc=atom.loc.join(factor.loc))
         return atom
 
+    @action(Rule('testlist1'))
+    def atom_1(self, expr):
+        return ast.Repr(value=expr, loc=None)
+
     @action(Tok('ident'))
-    def atom_1(self, tok):
+    def atom_2(self, tok):
         return ast.Name(id=tok.value, loc=tok.loc, ctx=None)
 
     @action(Alt(Tok('int'), Tok('float'), Tok('complex')))
-    def atom_2(self, tok):
+    def atom_3(self, tok):
         return ast.Num(n=tok.value, loc=tok.loc)
 
-    # TODO: does not handle string concatenation
     @action(Seq(Tok('strbegin'), Tok('strdata'), Tok('strend')))
-    def atom_3(self, begin_tok, data_tok, end_tok):
+    def atom_4(self, begin_tok, data_tok, end_tok):
         return ast.Str(s=data_tok.value,
                        begin_loc=begin_tok.loc, end_loc=end_tok.loc,
                        loc=begin_tok.loc.join(end_tok.loc))
 
-    @action(Rule('testlist1'))
-    def atom_4(self, expr):
-        return ast.Repr(value=expr, loc=None)
+    @action(Plus(atom_4))
+    def atom_5(self, strings):
+        return ast.Str(s=''.join([x.s for x in strings]),
+                       begin_loc=strings[0].begin_loc, end_loc=strings[-1].end_loc,
+                       loc=strings[0].loc.join(strings[-1].loc))
 
     atom = Alt(BeginEnd('(', Opt(Alt(Rule('yield_expr'), Rule('testlist_gexp'))), ')',
                         empty=lambda: ast.Tuple(elts=[], ctx=None, loc=None)),
@@ -1101,8 +1106,8 @@ class Parser:
                BeginEnd('{', Opt(Rule('dictmaker')), '}',
                         empty=lambda: ast.Dict(keys=[], values=[], colon_locs=[],
                                                ctx=None, loc=None)),
-               BeginEnd('`', atom_4, '`'),
-               atom_1, atom_2, atom_3)
+               BeginEnd('`', atom_1, '`'),
+               atom_2, atom_3, atom_5)
     """atom: ('(' [yield_expr|testlist_gexp] ')' |
               '[' [listmaker] ']' |
               '{' [dictmaker] '}' |

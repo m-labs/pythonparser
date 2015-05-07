@@ -280,7 +280,8 @@ def BeginEnd(begin_tok, inner_rule, end_tok, empty=None, loc=None):
         if node.loc is None and type(node) in [
                 ast.List, ast.Dict, ast.Tuple, ast.Repr,
                 ast.ListComp, ast.GeneratorExp,
-                ast.Call, ast.Subscript]:
+                ast.Call, ast.Subscript,
+                ast.arguments]:
             node.begin_loc, node.end_loc, node.loc = \
                 begin_loc, end_loc, begin_loc.join(end_loc)
         return node
@@ -318,8 +319,9 @@ class Parser:
         return node
 
     def _empty_arguments(self):
-        # TODO
-        return None
+        return ast.arguments(args=[], defaults=[], vararg=None, kwarg=None,
+                             star_loc=None, vararg_loc=None, dstar_loc=None, kwarg_loc=None,
+                             default_equals_locs=[], begin_loc=None, end_loc=None, loc=None)
 
     # Python-specific methods
     @action(Alt(Newline(),
@@ -344,13 +346,13 @@ class Parser:
 
     @action(Seq(Loc('@'), Rule('dotted_name'), Opt(BeginEnd('(', Rule('arglist'), ')')),
             Loc('newline')))
-    def decorator(at_loc, dotted_name, call_opt, newline_loc):
+    def decorator(self, at_loc, dotted_name, call_opt, newline_loc):
         """decorator: '@' dotted_name [ '(' [arglist] ')' ] NEWLINE"""
         name_loc, name = dotted_name
-        expr = ast.Name(id=name, loc=name_loc)
+        expr = ast.Name(id=name, ctx=None, loc=name_loc)
         if call_opt:
             call_opt.func = expr
-            call_opt.loc = name_loc.join(arglist_opt.loc)
+            call_opt.loc = name_loc.join(call_opt.loc)
             expr = call_opt
         return at_loc, expr
 
@@ -361,16 +363,24 @@ class Parser:
     def decorated(self, decorators, classfuncdef):
         """decorated: decorators (classdef | funcdef)"""
         classfuncdef.at_locs = list(map(lambda x: x[0], decorators))
-        classfuncdef.decorator_list = list(map(lambda x: x[0], decorators))
+        classfuncdef.decorator_list = list(map(lambda x: x[1], decorators))
+        classfuncdef.loc = classfuncdef.loc.join(decorators[0][0])
         return classfuncdef
 
     @action(Seq(Loc('def'), Tok('ident'), Rule('parameters'), Loc(':'), Rule('suite')))
     def funcdef(self, def_loc, ident_tok, args, colon_loc, suite):
         """funcdef: 'def' NAME parameters ':' suite"""
         return ast.FunctionDef(name=ident_tok.value, args=args, body=suite, decorator_list=[],
-                               keyword_loc=def_loc, name_loc=ident_tok.value, colon_loc=colon_loc)
+                               at_locs=[], keyword_loc=def_loc, name_loc=ident_tok.loc,
+                               colon_loc=colon_loc, loc=def_loc.join(suite[-1].loc))
 
-    parameters = BeginEnd('(', Rule('varargslist'), ')')
+    @action(Opt(Rule('varargslist')))
+    def parameters_1(self, args):
+        if args is None:
+            args = self._empty_arguments()
+        return args
+
+    parameters = BeginEnd('(', parameters_1, ')')
     """parameters: '(' [varargslist] ')'"""
 
     @action(Seq(Loc('**'), Tok('ident')))
@@ -389,7 +399,7 @@ class Parser:
                              star_loc=star_loc, vararg_loc=vararg_tok.loc,
                              dstar_loc=dstar_loc, kwarg_loc=kwarg_loc)
 
-    pass
+    varargslist = Tok('no')
     """varargslist: ((fpdef ['=' test] ',')*
                      ('*' NAME [',' '**' NAME] | '**' NAME) |
                      fpdef ['=' test] (',' fpdef ['=' test])* [','])"""
@@ -544,7 +554,7 @@ class Parser:
     def import_name(self, import_loc, names):
         """import_name: 'import' dotted_as_names"""
         return ast.Import(names=names,
-                          keyword_loc=import_loc, loc=keyword_loc.join(names[-1].loc))
+                          keyword_loc=import_loc, loc=import_loc.join(names[-1].loc))
 
     @action(Seq(Star(Loc('.')), Rule('dotted_name')))
     def import_from_1(self, dots, dotted_name):
@@ -556,45 +566,61 @@ class Parser:
 
     @action(Loc('*'))
     def import_from_3(self, star_loc):
-        return [ast.alias(name='*', asname=None,
-                          name_loc=star_loc, as_loc=None, asname_loc=None, loc=star_loc)]
+        return None, \
+               [ast.alias(name='*', asname=None,
+                          name_loc=star_loc, as_loc=None, asname_loc=None, loc=star_loc)], \
+               None
+
+    @action(Rule('import_as_names'))
+    def import_from_4(self, names):
+        return None, names, None
 
     @action(Seq(Loc('from'), Alt(import_from_1, import_from_2),
                 Loc('import'), Alt(import_from_3,
-                                   BeginEnd('(', Rule('import_as_names'), ')'),
-                                   Rule('import_as_names'))))
+                                   Seq(Loc('('), Rule('import_as_names'), Loc(')')),
+                                   import_from_4)))
     def import_from(self, from_loc, module_name, import_loc, names):
         """import_from: ('from' ('.'* dotted_name | '.'+)
                          'import' ('*' | '(' import_as_names ')' | import_as_names))"""
         dots, (module_loc, module) = module_name
+        lparen_loc, names, rparen_loc = names
         dots_loc = None
         if dots != []:
             dots_loc = dots[0].join(dots[-1])
+        loc = from_loc.join(names[-1].loc)
+        if rparen_loc:
+            loc = loc.join(rparen_loc)
         return ast.ImportFrom(names=names, module=module, level=len(dots),
                               keyword_loc=from_loc, dots_loc=dots_loc, module_loc=module_loc,
-                              import_loc=import_loc)
+                              import_loc=import_loc, lparen_loc=lparen_loc, rparen_loc=rparen_loc,
+                              loc=loc)
 
     @action(Seq(Tok('ident'), Opt(Seq(Loc('as'), Tok('ident')))))
-    def import_as_name(self, name, as_name_opt):
+    def import_as_name(self, name_tok, as_name_opt):
         """import_as_name: NAME ['as' NAME]"""
-        asname = as_loc = None
-        loc = name.loc
+        asname_name = asname_loc = as_loc = None
+        loc = name_tok.loc
         if as_name_opt:
-            asname, as_loc = as_name_opt
+            as_loc, asname = as_name_opt
+            asname_name = asname.value
+            asname_loc = asname.loc
             loc = loc.join(asname.loc)
-        return ast.alias(name=name.value, asname=asname.value,
-                         loc=loc, as_loc=as_loc)
+        return ast.alias(name=name_tok.value, asname=asname_name,
+                         loc=loc, name_loc=name_tok.loc, as_loc=as_loc, asname_loc=asname_loc)
 
     @action(Seq(Rule('dotted_name'), Opt(Seq(Loc('as'), Tok('ident')))))
     def dotted_as_name(self, dotted_name, as_name_opt):
         """dotted_as_name: dotted_name ['as' NAME]"""
-        asname = as_loc = None
-        loc, name = dotted_name
+        asname_name = asname_loc = as_loc = None
+        dotted_name_loc, dotted_name_name = dotted_name
+        loc = dotted_name_loc
         if as_name_opt:
-            asname, as_loc = as_name_opt
+            as_loc, asname = as_name_opt
+            asname_name = asname.value
+            asname_loc = asname.loc
             loc = loc.join(asname.loc)
-        return ast.alias(name=name, asname=asname.value,
-                         loc=loc, as_loc=as_loc)
+        return ast.alias(name=dotted_name_name, asname=asname_name,
+                         loc=loc, name_loc=dotted_name_loc, as_loc=as_loc, asname_loc=asname_loc)
 
     import_as_names = List(Rule('import_as_name'), ',', trailing=True)
     """import_as_names: import_as_name (',' import_as_name)* [',']"""
@@ -708,25 +734,31 @@ class Parser:
         handlers = []
         for clause in clauses:
             handler, handler.colon_loc, handler.body = clause
+            handler.loc = handler.loc.join(handler.body[-1].loc)
             handlers.append(handler)
 
         else_loc = else_colon_loc = orelse = None
+        loc = handlers[-1].loc
         if else_opt:
             else_loc, else_colon_loc, orelse = else_opt
+            loc = orelse[-1].loc
 
-        stmt = ast.TryExcept(handlers=handlers, orelse=orelse,
-                             else_loc=else_loc, else_colon_loc=else_colon_loc)
+        stmt = ast.TryExcept(body=None, handlers=handlers, orelse=orelse,
+                             else_loc=else_loc, else_colon_loc=else_colon_loc,
+                             loc=loc)
         if finally_opt:
             finally_loc, finally_colon_loc, finalbody = finally_opt
             return ast.TryFinally(body=[stmt], finalbody=finalbody,
-                                  finally_loc=finally_loc, finally_colon_loc=finally_colon_loc)
+                                  finally_loc=finally_loc, finally_colon_loc=finally_colon_loc,
+                                  loc=finalbody[-1].loc)
         else:
             return stmt
 
     @action(Seq(Loc('finally'), Loc(':'), Rule('suite')))
     def try_stmt_2(self, finally_loc, finally_colon_loc, finalbody):
-        return ast.TryFinally(finalbody=finalbody,
-                              finally_loc=finally_loc, finally_colon_loc=finally_colon_loc)
+        return ast.TryFinally(body=None, finalbody=finalbody,
+                              finally_loc=finally_loc, finally_colon_loc=finally_colon_loc,
+                              loc=finalbody[-1].loc)
 
     @action(Seq(Loc('try'), Loc(':'), Rule('suite'), Alt(try_stmt_1, try_stmt_2)))
     def try_stmt(self, try_loc, try_colon_loc, body, stmt):
@@ -741,7 +773,10 @@ class Parser:
         if stmt.body is None: # try..finally or try..except
             stmt.body = body
         else: # try..except..finally
-            stmt.body.keyword_loc, stmt.body.try_colon_loc = try_loc, try_colon_loc
+            stmt.body[0].keyword_loc, stmt.body[0].try_colon_loc, stmt.body[0].body = \
+                try_loc, try_colon_loc, body
+            stmt.body[0].loc = stmt.body[0].loc.join(try_loc)
+        stmt.loc = stmt.loc.join(try_loc)
         return stmt
 
     @action(Seq(Loc('with'), Rule('test'), Opt(Rule('with_var')), Loc(':'), Rule('suite')))
@@ -763,12 +798,15 @@ class Parser:
     def except_clause(self, except_loc, exc_opt):
         """except_clause: 'except' [test [('as' | ',') test]]"""
         type_ = name = as_loc = None
+        loc = except_loc
         if exc_opt:
             type_, name_opt = exc_opt
+            loc = loc.join(type_.loc)
             if name_opt:
                 as_loc, name = name_opt
+                loc = loc.join(name.loc)
         return ast.ExceptHandler(type=type_, name=name,
-                                 except_loc=except_loc, as_loc=as_loc)
+                                 except_loc=except_loc, as_loc=as_loc, loc=loc)
 
     @action(Plus(Rule('stmt')))
     def suite_1(self, stmts):
@@ -785,13 +823,15 @@ class Parser:
     old_test = Alt(Rule('or_test'), Rule('old_lambdef'))
     """old_test: or_test | old_lambdef"""
 
-    @action(Seq(Loc('lambda'), Opt(Rule('varargslist')), Loc(':'), Rule(old_test)))
+    @action(Seq(Loc('lambda'), Opt(Rule('varargslist')), Loc(':'), Rule('old_test')))
     def old_lambdef(self, lambda_loc, args_opt, colon_loc, body):
         """old_lambdef: 'lambda' [varargslist] ':' old_test"""
-        args = self._empty_arguments() if not args_opt else args_opt
-        return ast.Lambda(args=args, body=body,
-                          loc=lambda_loc.join(body.loc),
-                          keyword_loc=lambda_loc, colon_loc=colon_loc)
+        if args_opt is None:
+            args_opt = self._empty_arguments()
+            args_opt.loc = colon_loc.begin()
+        return ast.Lambda(args=args_opt, body=body,
+                          lambda_loc=lambda_loc, colon_loc=colon_loc,
+                          loc=lambda_loc.join(body.loc))
     # 2.x-only backwards compatibility end
 
     @action(Seq(Rule('or_test'), Opt(Seq(Loc('if'), Rule('or_test'),
@@ -974,10 +1014,12 @@ class Parser:
     @action(Seq(Loc('lambda'), Opt(Rule('varargslist')), Loc(':'), Rule('test')))
     def lambdef(self, lambda_loc, args_opt, colon_loc, body):
         """lambdef: 'lambda' [varargslist] ':' test"""
-        args = self._empty_arguments() if not args_opt else args_opt
-        return ast.Lambda(args=args, body=body,
-                          loc=lambda_loc.join(body.loc),
-                          keyword_loc=lambda_loc, colon_loc=colon_loc)
+        if args_opt is None:
+            args_opt = self._empty_arguments()
+            args_opt.loc = colon_loc.begin()
+        return ast.Lambda(args=args_opt, body=body,
+                          lambda_loc=lambda_loc, colon_loc=colon_loc,
+                          loc=lambda_loc.join(body.loc))
 
     @action(Seq(Loc('.'), Tok('ident')))
     def trailer_1(self, dot_loc, ident_tok):
@@ -1230,7 +1272,7 @@ class Parser:
     def yield_expr(self, stmt_loc, exprs):
         """yield_expr: 'yield' [testlist]"""
         return ast.Yield(value=exprs,
-                         loc=stmt_loc.join(exprs.loc), keyword_loc=stmt_loc)
+                         yield_loc=stmt_loc, loc=stmt_loc.join(exprs.loc))
 
 def for_code(code, version=(2,7)):
     return Parser(lexer.Lexer(source.Buffer(code), version))

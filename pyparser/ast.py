@@ -15,6 +15,8 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from .shim import ast
 from .shim.ast import AST
 
+# Location mixins
+
 class commonloc(object):
     """
     A mixin common for all nodes.
@@ -61,17 +63,21 @@ class beginendloc(commonloc):
     """
     _locs = commonloc._locs + ('begin_loc', 'end_loc')
 
-class alias(commonloc):
+# AST nodes
+
+class alias(commonloc, ast.alias):
     """
     An import alias, e.g. ``x as y``.
 
     :ivar name: (string) value to import
     :ivar asname: (string) name to add to the environment
+    :ivar name_loc: location of name
     :ivar as_loc: location of ``as``
+    :ivar asname_loc: location of asname
     """
-    _locs = commonloc._locs + ('as_loc',)
+    _locs = commonloc._locs + ('name_loc', 'as_loc', 'asname_loc')
 
-class arguments(commonloc):
+class arguments(beginendloc, ast.arguments):
     """
     Function definition arguments, e.g. in ``def f(x, y=1, *z, **t)``.
 
@@ -85,6 +91,8 @@ class arguments(commonloc):
     :ivar kwarg_loc: location of keyword splat formal argument, if any
     :ivar default_equals_locs: locations of ``=``
     """
+    _locs = beginendloc._locs + ('star_loc', 'vararg_loc', 'dstar_loc',
+                                 'vararg_loc', 'kwarg_loc', 'default_equals_locs')
 
 class boolop:
     """
@@ -241,10 +249,10 @@ class Lambda(expr, ast.Lambda):
 
     :ivar args: (:class:`arguments`) arguments
     :ivar body: (node) body
-    :ivar keyword_loc: location of ``lambda``
+    :ivar lambda_loc: location of ``lambda``
     :ivar colon_loc: location of ``:``
     """
-    _locs = expr._locs + ('keyword_loc', 'colon_loc')
+    _locs = expr._locs + ('lambda_loc', 'colon_loc')
 class List(beginendloc, expr, ast.List):
     """
     A list, e.g. ``[x, y]``.
@@ -320,8 +328,9 @@ class Yield(expr, ast.Yield):
     A yield expression, e.g. ``(yield x)``.
 
     :ivar value: (node) yielded value
+    :ivar yield_loc: location of ``yield``
     """
-    _locs = expr._locs + ('keyword_loc',)
+    _locs = expr._locs + ('yield_loc',)
 
 # expr_context
 #     AugLoad
@@ -507,7 +516,7 @@ class FunctionDef(keywordloc, stmt, ast.FunctionDef):
     :ivar colon_loc: location of ``:``, if any
     :ivar at_locs: locations of decorator ``@``
     """
-    _locs = keywordloc._locs + ('name_loc', 'colon_loc', 'at_loc')
+    _locs = keywordloc._locs + ('name_loc', 'colon_loc', 'at_locs')
 class Global(keywordloc, stmt, ast.Global):
     """
     The ``global x, y`` statement.
@@ -534,9 +543,10 @@ class Import(keywordloc, stmt, ast.Import):
 
     :ivar names: (list of :class:`alias`) names
     """
-class ImportFrom(keywordloc, stmt, ast.Import):
+class ImportFrom(keywordloc, stmt, ast.ImportFrom):
     """
-    The ``from ...x import y, z`` or ``from x import *`` statement.
+    The ``from ...x import y, z`` or ``from x import (y, z)`` or
+    ``from x import *`` statement.
 
     :ivar names: (list of :class:`alias`) names
     :ivar module: (string) module name, if any
@@ -545,8 +555,10 @@ class ImportFrom(keywordloc, stmt, ast.Import):
     :ivar dots_loc: location of dots, if any
     :ivar module_loc: location of module name, if any
     :ivar import_loc: location of ``import``
+    :ivar lparen_loc: location of ``(``, if any
+    :ivar rparen_loc: location of ``)``, if any
     """
-    _locs = keywordloc._locs + ('module_loc', 'import_loc')
+    _locs = keywordloc._locs + ('dots_loc', 'module_loc', 'import_loc', 'lparen_loc', 'rparen_loc')
 class Pass(keywordloc, stmt, ast.Pass):
     """The ``pass`` statement."""
 class Print(keywordloc, stmt, ast.Print):
@@ -582,7 +594,7 @@ class TryExcept(keywordloc, stmt, ast.TryExcept):
     :ivar else_colon_loc: location of ``:`` after ``else``
     """
     _locs = keywordloc._locs + ('try_colon_loc', 'else_loc', 'else_colon_loc',)
-class TryFinally(keywordloc, stmt, ast.TryExcept):
+class TryFinally(keywordloc, stmt, ast.TryFinally):
     """
     The ``try:·  x·finally:·  y`` statement.
 

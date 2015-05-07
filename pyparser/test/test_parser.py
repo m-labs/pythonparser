@@ -51,7 +51,7 @@ class ParserTestCase(unittest.TestCase):
             flat_node[unicode(field)] = value
         return flat_node
 
-    _loc_re  = re.compile(r"\s*([~^]+)\s+([a-z_0-9.]+)")
+    _loc_re  = re.compile(r"\s*([~^]*)<?\s+([a-z_0-9.]+)")
     _path_re = re.compile(r"(([a-z_]+)|([0-9]+))(\.)?")
 
     def match_loc(self, ast, matcher, root=lambda x: x):
@@ -534,7 +534,7 @@ class ParserTestCase(unittest.TestCase):
         self.assertParsesExpr(
             {'ty': 'Yield', 'value': self.ast_1},
             "(yield 1)",
-            " ~~~~~ keyword_loc"
+            " ~~~~~ yield_loc"
             " ~~~~~~~ loc")
 
     def test_if_expr(self):
@@ -544,6 +544,34 @@ class ParserTestCase(unittest.TestCase):
             "  ~~ if_loc"
             "       ~~~~ else_loc"
             "~~~~~~~~~~~~~ loc")
+
+    def test_lambda(self):
+        self.assertParsesExpr(
+            {'ty': 'Lambda',
+             'args': {'ty': 'arguments', 'args': [], 'defaults': [],
+                      'kwarg': None, 'vararg': None},
+             'body': self.ast_x},
+            "lambda: x",
+            "~~~~~~ lambda_loc"
+            "      < args.loc"
+            "      ^ colon_loc"
+            "~~~~~~~~~ loc")
+
+    def test_old_lambda(self):
+        self.assertParsesExpr(
+            {'ty': 'ListComp', 'elt': self.ast_x, 'generators': [
+                {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y,
+                 'ifs': [{'ty': 'Lambda',
+                     'args': {'ty': 'arguments', 'args': [], 'defaults': [],
+                              'kwarg': None, 'vararg': None},
+                     'body': self.ast_t}
+                ]}
+            ]},
+            "[x for y in z if lambda: t]",
+            "                 ~~~~~~ generators.0.ifs.0.lambda_loc"
+            "                       < generators.0.ifs.0.args.loc"
+            "                       ^ generators.0.ifs.0.colon_loc"
+            "                 ~~~~~~~~~ generators.0.ifs.0.loc")
 
     #
     # CALLS, ATTRIBUTES AND SUBSCRIPTS
@@ -836,7 +864,7 @@ class ParserTestCase(unittest.TestCase):
         self.assertParsesSuite(
             [{'ty': 'Expr', 'value': {'ty': 'Yield', 'value': self.ast_x}}],
             "yield x",
-            "~~~~~ 0.value.keyword_loc"
+            "~~~~~ 0.value.yield_loc"
             "~~~~~~~ 0.value.loc"
             "~~~~~~~ 0.loc")
 
@@ -864,6 +892,103 @@ class ParserTestCase(unittest.TestCase):
             "raise x, y, z",
             "~~~~~ 0.keyword_loc"
             "~~~~~~~~~~~~~ 0.loc")
+
+    def test_import(self):
+        self.assertParsesSuite(
+            [{'ty': 'Import', 'names': [
+                {'ty': 'alias', 'name': 'foo', 'asname': None}
+            ]}],
+            "import foo",
+            "~~~~~~ 0.keyword_loc"
+            "       ~~~ 0.names.0.name_loc"
+            "       ~~~ 0.names.0.loc"
+            "~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Import', 'names': [
+                {'ty': 'alias', 'name': 'foo.bar', 'asname': None}
+            ]}],
+            "import foo. bar",
+            "~~~~~~ 0.keyword_loc"
+            "       ~~~~~~~~ 0.names.0.name_loc"
+            "       ~~~~~~~~ 0.names.0.loc"
+            "~~~~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Import', 'names': [
+                {'ty': 'alias', 'name': 'foo', 'asname': 'bar'}
+            ]}],
+            "import foo as bar",
+            "~~~~~~ 0.keyword_loc"
+            "       ~~~ 0.names.0.name_loc"
+            "           ~~ 0.names.0.as_loc"
+            "              ~~~ 0.names.0.asname_loc"
+            "       ~~~~~~~~~~ 0.names.0.loc"
+            "~~~~~~~~~~~~~~~~~ 0.loc")
+
+    def test_from(self):
+        self.assertParsesSuite(
+            [{'ty': 'ImportFrom', 'names': [
+                {'ty': 'alias', 'name': 'foo', 'asname': None}
+            ], 'module': 'bar', 'level': 0}],
+            "from bar import foo",
+            "~~~~ 0.keyword_loc"
+            "     ~~~ 0.module_loc"
+            "         ~~~~~~ 0.import_loc"
+            "                ~~~ 0.names.0.name_loc"
+            "                ~~~ 0.names.0.loc"
+            "~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'ImportFrom', 'names': [
+                {'ty': 'alias', 'name': 'foo', 'asname': None}
+            ], 'module': 'bar', 'level': 2}],
+            "from ..bar import foo",
+            "~~~~ 0.keyword_loc"
+            "     ~~ 0.dots_loc"
+            "       ~~~ 0.module_loc"
+            "           ~~~~~~ 0.import_loc"
+            "                  ~~~ 0.names.0.name_loc"
+            "                  ~~~ 0.names.0.loc"
+            "~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'ImportFrom', 'names': [
+                {'ty': 'alias', 'name': 'foo', 'asname': 'bar'}
+            ], 'module': 'bar', 'level': 2}],
+            "from ..bar import foo as bar",
+            "                  ~~~ 0.names.0.name_loc"
+            "                      ~~ 0.names.0.as_loc"
+            "                         ~~~ 0.names.0.asname_loc"
+            "                  ~~~~~~~~~~ 0.names.0.loc"
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'ImportFrom', 'names': [
+                {'ty': 'alias', 'name': 'foo', 'asname': None}
+            ], 'module': 'bar', 'level': 2}],
+            "from ..bar import (foo)",
+            "                  ^ 0.lparen_loc"
+            "                   ~~~ 0.names.0.loc"
+            "                      ^ 0.rparen_loc"
+            "~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'ImportFrom', 'names': [
+                {'ty': 'alias', 'name': '*', 'asname': None}
+            ], 'module': 'bar', 'level': 0}],
+            "from bar import *",
+            "                ^ 0.names.0.name_loc"
+            "                ^ 0.names.0.loc"
+            "~~~~~~~~~~~~~~~~~ 0.loc")
+
+        # self.assertParsesSuite(
+        #     [{'ty': 'ImportFrom', 'names': [
+        #         {'ty': 'alias', 'name': 'foo', 'asname': None}
+        #     ], 'module': None, 'level': 2}],
+        #     "from .. import foo",
+        #     "     ~~ 0.dots_loc"
+        #     "~~~~~~~~~~~~~~~~~~ 0.loc")
 
     def test_global(self):
         self.assertParsesSuite(
@@ -981,6 +1106,86 @@ class ParserTestCase(unittest.TestCase):
             "                    ^ 0.else_colon_loc"
             "~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
 
+    def test_try(self):
+        self.assertParsesSuite(
+            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': None,
+              'handlers': [
+                {'ty': 'ExceptHandler', 'type': None, 'name': None,
+                 'body': [self.ast_expr_2]}
+            ]}],
+            "try:·  1·except:·  2",
+            "~~~ 0.keyword_loc"
+            "   ^ 0.try_colon_loc"
+            "         ~~~~~~ 0.handlers.0.except_loc"
+            "               ^ 0.handlers.0.colon_loc"
+            "         ~~~~~~~~~~~ 0.handlers.0.loc"
+            "~~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': None,
+              'handlers': [
+                {'ty': 'ExceptHandler', 'type': self.ast_y, 'name': None,
+                 'body': [self.ast_expr_2]}
+            ]}],
+            "try:·  1·except y:·  2",
+            "")
+
+        self.assertParsesSuite(
+            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': None,
+              'handlers': [
+                {'ty': 'ExceptHandler', 'type': self.ast_y, 'name': self.ast_t,
+                 'body': [self.ast_expr_2]}
+            ]}],
+            "try:·  1·except y as t:·  2",
+            "                  ~~ 0.handlers.0.as_loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': None,
+              'handlers': [
+                {'ty': 'ExceptHandler', 'type': self.ast_y, 'name': self.ast_t,
+                 'body': [self.ast_expr_2]}
+            ]}],
+            "try:·  1·except y, t:·  2",
+            "                 ^ 0.handlers.0.as_loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [self.ast_expr_3],
+              'handlers': [
+                {'ty': 'ExceptHandler', 'type': None, 'name': None,
+                 'body': [self.ast_expr_2]}
+            ]}],
+            "try:·  1·except:·  2·else:·  3",
+            "                     ~~~~ 0.else_loc"
+            "                         ^ 0.else_colon_loc"
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+    def test_finally(self):
+        self.assertParsesSuite(
+            [{'ty': 'TryFinally', 'body': [self.ast_expr_1], 'finalbody': [self.ast_expr_2]}],
+            "try:·  1·finally:·  2",
+            "~~~ 0.keyword_loc"
+            "   ^ 0.try_colon_loc"
+            "         ~~~~~~~ 0.finally_loc"
+            "                ^ 0.finally_colon_loc"
+            "~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'TryFinally', 'finalbody': [self.ast_expr_3], 'body': [
+                {'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': None, 'handlers': [
+                    {'ty': 'ExceptHandler', 'type': None, 'name': None,
+                     'body': [self.ast_expr_2]}
+                ]}
+            ]}],
+            "try:·  1·except:·  2·finally:·  3",
+            "~~~ 0.keyword_loc"
+            "   ^ 0.try_colon_loc"
+            "~~~ 0.body.0.keyword_loc"
+            "   ^ 0.body.0.try_colon_loc"
+            "~~~~~~~~~~~~~~~~~~~~ 0.body.0.loc"
+            "                     ~~~~~~~ 0.finally_loc"
+            "                            ^ 0.finally_colon_loc"
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+
     def test_with(self):
         self.assertParsesSuite(
             [{'ty': 'With', 'context_expr': self.ast_x, 'optional_vars': None,
@@ -1014,6 +1219,50 @@ class ParserTestCase(unittest.TestCase):
             "       ^ 0.lparen_loc"
             "            ^ 0.rparen_loc"
             "~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+    def test_func(self):
+        self.assertParsesSuite(
+            [{'ty': 'FunctionDef', 'name': 'foo',
+              'args': {'ty': 'arguments', 'args': [], 'defaults': [],
+                       'kwarg': None, 'vararg': None},
+              'body': [{'ty': 'Pass'}], 'decorator_list': []}],
+            "def foo():·  pass",
+            "~~~ 0.keyword_loc"
+            "    ~~~ 0.name_loc"
+            "       ^ 0.args.begin_loc"
+            "        ^ 0.args.end_loc"
+            "         ^ 0.colon_loc"
+            "~~~~~~~~~~~~~~~~~ 0.loc")
+
+    def test_decorated(self):
+        self.assertParsesSuite(
+            [{'ty': 'ClassDef', 'name': 'x', 'bases': [],
+              'body': [{'ty': 'Pass'}], 'decorator_list': [self.ast_x]}],
+            "@x·class x:·  pass",
+            "^ 0.at_locs.0"
+            " ^ 0.decorator_list.0.loc"
+            "~~~~~~~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'ClassDef', 'name': 'x', 'bases': [],
+              'body': [{'ty': 'Pass'}], 'decorator_list': [
+                {'ty': 'Call', 'func': self.ast_x,
+                 'args': [self.ast_1], 'keywords': [], 'kwargs': None, 'starargs': None}
+            ]}],
+            "@x(1)·class x:·  pass",
+            "^ 0.at_locs.0"
+            " ~~~~ 0.decorator_list.0.loc"
+            "~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'FunctionDef', 'name': 'x',
+              'args': {'ty': 'arguments', 'args': [], 'defaults': [],
+                       'kwarg': None, 'vararg': None},
+              'body': [{'ty': 'Pass'}], 'decorator_list': [self.ast_x]}],
+            "@x·def x():·  pass",
+            "^ 0.at_locs.0"
+            " ^ 0.decorator_list.0.loc"
+            "~~~~~~~~~~~~~~~~~~ 0.loc")
 
     #
     # PARSING MODES

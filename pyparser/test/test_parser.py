@@ -619,6 +619,12 @@ class ParserTestCase(unittest.TestCase):
 
         self.assertParsesExpr(
             {'ty': 'Call', 'func': self.ast_x, 'starargs': None, 'kwargs': None,
+             'args': [self.ast_y, self.ast_z], 'keywords': []},
+            "x(y, z)",
+            "~~~~~~~ loc")
+
+        self.assertParsesExpr(
+            {'ty': 'Call', 'func': self.ast_x, 'starargs': None, 'kwargs': None,
              'args': [self.ast_y], 'keywords': [
                 { 'ty': 'keyword', 'arg': 'z', 'value': self.ast_z}
             ]},
@@ -1386,12 +1392,28 @@ class ParserTestCase(unittest.TestCase):
             "~~~~ loc")
 
         self.assertParsesArgs(
+            {'ty': 'arguments', 'args': [], 'defaults': [],
+             'vararg': 'y', 'kwarg': None},
+            "*y",
+            "^ star_loc"
+            " ~ vararg_loc"
+            "~~ loc")
+
+        self.assertParsesArgs(
             {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],
              'vararg': 'y', 'kwarg': None},
             "x, *y",
             "   ^ star_loc"
             "    ~ vararg_loc"
             "~~~~~ loc")
+
+        self.assertParsesArgs(
+            {'ty': 'arguments', 'args': [], 'defaults': [],
+             'vararg': None, 'kwarg': 'y'},
+            "**y",
+            "^^ dstar_loc"
+            "  ~ kwarg_loc"
+            "~~~ loc")
 
         self.assertParsesArgs(
             {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],

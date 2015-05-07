@@ -476,17 +476,18 @@ class Parser:
         return ast.arguments(args=[], defaults=[], vararg=None, kwarg=kwarg_tok.value,
                              star_loc=None, vararg_loc=None,
                              dstar_loc=dstar_loc, kwarg_loc=kwarg_tok.loc,
-                             begin_loc=None, end_loc=None, equals_locs=[], loc=kwarg_tok.loc)
+                             begin_loc=None, end_loc=None, equals_locs=[],
+                             loc=dstar_loc.join(kwarg_tok.loc))
 
     @action(Seq(Loc('*'), Tok('ident'),
                 Opt(Seq(Tok(','), Loc('**'), Tok('ident')))))
     def varargslist_3(self, star_loc, vararg_tok, kwarg_opt):
         dstar_loc = kwarg = kwarg_loc = None
-        loc = vararg_tok.loc
+        loc = star_loc.join(vararg_tok.loc)
         if kwarg_opt:
             _, dstar_loc, kwarg_tok = kwarg_opt
             kwarg, kwarg_loc = kwarg_tok.value, kwarg_tok.loc
-            loc = kwarg_tok.loc
+            loc = star_loc.join(kwarg_tok.loc)
         return ast.arguments(args=[], defaults=[], vararg=vararg_tok.value, kwarg=kwarg,
                              star_loc=star_loc, vararg_loc=vararg_tok.loc,
                              dstar_loc=dstar_loc, kwarg_loc=kwarg_loc,
@@ -524,7 +525,7 @@ class Parser:
 
         if args.loc is None:
             args.loc = fparam_loc(*fparams[0]).join(fparam_loc(*fparams[-1]))
-        else:
+        elif len(fparams) > 0:
             args.loc = args.loc.join(fparam_loc(*fparams[0]))
 
         return args
@@ -1303,7 +1304,7 @@ class Parser:
         for arg in pre_args + post_args:
             if isinstance(arg, ast.keyword):
                 call.keywords.append(arg)
-            elif len(call.args) > 0:
+            elif len(call.keywords) > 0:
                 error = diagnostic.Diagnostic(
                     "error", "non-keyword arg after keyword arg", {}, arg.loc)
                 raise diagnostic.DiagnosticException(error)

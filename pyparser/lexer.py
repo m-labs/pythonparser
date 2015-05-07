@@ -97,6 +97,7 @@ class Lexer:
         self.source_buffer = source_buffer
         self.version = version
         self.interactive = interactive
+        self.print_function = False
 
         self.offset = 0
         self.new_line = True
@@ -364,7 +365,10 @@ class Lexer:
         elif match.group(21) is not None: # keywords and operators
             kwop = match.group(21)
             self._match_pair_delim(tok_range, kwop)
-            self.queue.append(Token(tok_range, kwop))
+            if kwop == 'print' and self.print_function:
+                self.queue.append(Token(tok_range, "ident", "print"))
+            else:
+                self.queue.append(Token(tok_range, kwop))
 
         elif match.group(22) is not None: # identifier
             self.queue.append(Token(tok_range, "ident", match.group(22)))

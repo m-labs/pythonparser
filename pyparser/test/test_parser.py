@@ -1477,3 +1477,17 @@ class ParserTestCase(unittest.TestCase):
             {'ty': 'Expression', 'body': [self.ast_1]},
             "1·",
             mode='eval_input', interactive=True)
+
+    #
+    # FUTURE IMPORTS
+    #
+
+    def test_future_print(self):
+        self.assertParsesSuite(
+            [{'ty': 'ImportFrom',
+              'names': [{'ty': 'alias', 'name': 'print_function', 'asname': None}],
+              'module': '__future__', 'level': 0},
+             {'ty': 'Expr', 'value':
+                {'ty': 'Call', 'func': {'ty': 'Name', 'id': 'print', 'ctx': None},
+                 'starargs': None, 'kwargs': None, 'args': [self.ast_x], 'keywords': []}}],
+            "from __future__ import print_function·print(x)")

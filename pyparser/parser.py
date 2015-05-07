@@ -352,26 +352,27 @@ class Parser:
 
     # Generic LL parsing methods
     def __init__(self, lexer):
-        self.lexer  = lexer
-        self.tokens = list(lexer) + [self.lexer.next(eof_token=True)]
-        self.index  = 0
-        self.token  = self.tokens[self.index]
+        self.lexer   = lexer
+        self._tokens = []
+        self._index  = -1
+        self._advance()
 
     def _save(self):
-        return self.index
+        return self._index
 
     def _restore(self, data):
-        self.index = data
-        self.token = self.tokens[self.index]
+        self._index = data
+        self._token = self._tokens[self._index]
 
     def _advance(self):
-        if self.index < len(self.tokens) - 1:
-            self.index += 1
-        self.token = self.tokens[self.index]
+        self._index += 1
+        if self._index == len(self._tokens):
+            self._tokens.append(self.lexer.next(eof_token=True))
+        self._token = self._tokens[self._index]
 
     def _accept(self, expected_kind):
-        if self.token.kind == expected_kind:
-            result = self.token
+        if self._token.kind == expected_kind:
+            result = self._token
             self._advance()
             return result
         return unmatched
@@ -399,6 +400,10 @@ class Parser:
                         star_loc=None, dstar_loc=None, loc=None)
 
     # Python-specific methods
+    def add_flags(self, flags):
+        if 'print_function' in flags:
+            self.lexer.print_function = True
+
     @action(Alt(Newline(),
                 Rule('simple_stmt'),
                 SeqN(0, Rule('compound_stmt'), Newline())))
@@ -718,6 +723,10 @@ class Parser:
         loc = from_loc.join(names[-1].loc)
         if rparen_loc:
             loc = loc.join(rparen_loc)
+
+        if module == '__future__':
+            self.add_flags([x.name for x in names])
+
         return ast.ImportFrom(names=names, module=module, level=len(dots),
                               keyword_loc=from_loc, dots_loc=dots_loc, module_loc=module_loc,
                               import_loc=import_loc, lparen_loc=lparen_loc, rparen_loc=rparen_loc,

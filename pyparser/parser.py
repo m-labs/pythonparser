@@ -1399,11 +1399,13 @@ class Parser:
         return ast.Yield(value=exprs,
                          yield_loc=stmt_loc, loc=stmt_loc.join(exprs.loc))
 
-def for_code(code, version=(2,7)):
+import sys
+
+def for_code(code, version=sys.version_info[0:2]):
     return Parser(lexer.Lexer(source.Buffer(code), version))
 
 def main():
-    import sys, time, codecs
+    import time, codecs
     for filename in sys.argv[1:]:
         with codecs.open(filename, encoding='utf-8') as f:
             input = f.read()

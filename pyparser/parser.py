@@ -1391,8 +1391,15 @@ if __name__ == "__main__":
     import sys, time, codecs
     for filename in sys.argv[1:]:
         with codecs.open(filename, encoding='utf-8') as f:
-            start = time.time()
-            ast = for_code(f.read()).file_input()
-            interval = time.time() - start
-            print(ast)
-            print("elapsed: %.2f" % interval, file=sys.stderr)
+            input = f.read()
+            try:
+                start = time.time()
+                ast = for_code(input).file_input()
+                interval = time.time() - start
+
+                print(ast)
+                print("elapsed: %.2f (%.2f kb/s)" % (interval, len(input)/interval/1000),
+                      file=sys.stderr)
+            except diagnostic.DiagnosticException as e:
+                print(e.render,
+                      file=sys.stderr)

@@ -15,7 +15,10 @@ def instrument():
     rewriter = source.Rewriter(_buf)
     lex = lexer.Lexer(_buf, (3, 4))
     in_grammar = False
-    stack = []
+    paren_stack = []
+    stmt_stack = [None]
+    all_stmt_list = []
+    in_square = 0
     for token in lex:
         if token.kind == 'from':
             token = lex.next()
@@ -45,19 +48,37 @@ def instrument():
                     rewriter.insert_before(rparen.loc,
                         "loc=(%d,%d)" % (token.loc.begin_pos, token.loc.end_pos))
                 else:
-                    stack.append(", loc=(%d,%d)" % (token.loc.begin_pos, token.loc.end_pos))
+                    paren_stack.append(", loc=(%d,%d)" % (token.loc.begin_pos, token.loc.end_pos))
 
         if token.kind == '(':
-            stack.append(None)
+            paren_stack.append(None)
 
         if token.kind == ')':
-            data = stack.pop()
+            data = paren_stack.pop()
             if data is not None:
                 rewriter.insert_before(token.loc, data)
+
+        if token.kind == '[':
+            in_square += 1
+        elif token.kind == ']':
+            in_square -= 1
+
+        if token.kind in ('def', 'if', 'elif', 'else', 'for') and in_square == 0:
+            all_stmt_list.append((token.loc.begin_pos, token.loc.end_pos))
+            stmt_stack.append("_all_stmts[(%d,%d)] = True\n" %
+                                (token.loc.begin_pos, token.loc.end_pos))
+        elif token.kind == 'lambda':
+            stmt_stack.append(None)
+
+        if token.kind == 'indent':
+            data = stmt_stack.pop()
+            if data is not None:
+                rewriter.insert_after(token.loc, data + " " * token.loc.column())
 
     with codecs.open(os.path.join(os.path.dirname(__file__), 'parser.py'), 'w',
                      encoding='utf-8') as f:
         f.write(rewriter.rewrite().source)
+        f.write("\n_all_stmts = {%s}\n" % ', '.join(["(%d,%d): False" % x for x in all_stmt_list]))
 
 # Produce an HTML report for test coverage of parser rules.
 def report(parser, name='parser'):
@@ -83,6 +104,17 @@ def report(parser, name='parser'):
 
         total_pts += pts
         total_covered += covered
+
+    for stmt in parser._all_stmts:
+        loc = source.Range(_buf, *stmt)
+        if parser._all_stmts[stmt]:
+            rewriter.insert_before(loc, r"<span class='covered'>")
+        else:
+            rewriter.insert_before(loc, r"<span class='uncovered'>")
+        rewriter.insert_after(loc, r"</span>")
+
+        total_pts += 1
+        total_covered += (1 if parser._all_stmts[stmt] else 0)
 
     print("GRAMMAR COVERAGE: %.2f%%" % (total_covered / total_pts * 100))
 

@@ -436,14 +436,18 @@ class Parser:
                        SeqN(0, Rule('compound_stmt'), Newline()))))
     def single_input(self, body):
         """single_input: NEWLINE | simple_stmt | compound_stmt NEWLINE"""
-        loc = None if body == [] else body[0].loc
+        loc = None
+        if body != []:
+            loc = body[0].loc
         return ast.Interactive(body=body, loc=loc)
 
     @action(Expect(SeqN(0, Star(Alt(Newline(), Rule('stmt'))), Tok('eof'))))
     def file_input(parser, body):
         """file_input: (NEWLINE | stmt)* ENDMARKER"""
         body = reduce(list.__add__, body, [])
-        loc = None if body == [] else body[0].loc
+        loc = None
+        if body != []:
+            loc = body[0].loc
         return ast.Module(body=body, loc=loc)
 
     @action(Expect(SeqN(0, Rule('testlist'), Star(Tok('newline')), Tok('eof'))))
@@ -623,15 +627,17 @@ class Parser:
 
     @action(List(Rule('test'), ',', trailing=True))
     def print_stmt_1(self, values):
-        loc = values.trailing_comma.loc if values.trailing_comma else values[-1].loc
-        nl = False if values.trailing_comma else True
+        nl, loc = True, values[-1].loc
+        if values.trailing_comma:
+            nl, loc = False, values.trailing_comma.loc
         return ast.Print(dest=None, values=values, nl=nl,
                          dest_loc=None, loc=loc)
 
     @action(Seq(Loc('>>'), Rule('test'), Tok(','), List(Rule('test'), ',', trailing=True)))
     def print_stmt_2(self, dest_loc, dest, comma_tok, values):
-        loc = values.trailing_comma.loc if values.trailing_comma else values[-1].loc
-        nl = False if values.trailing_comma else True
+        nl, loc = True, values[-1].loc
+        if values.trailing_comma:
+            nl, loc = False, values.trailing_comma.loc
         return ast.Print(dest=dest, values=values, nl=nl,
                          dest_loc=dest_loc, loc=loc)
 

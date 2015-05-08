@@ -314,6 +314,10 @@ class LexerTestCase(unittest.TestCase):
                          [("fatal", "mismatched ')'", (1, 2))],
                          "[", None)
 
+        self.assertDiagnoses(
+                         ")",
+                         [("fatal", "mismatched ')'", (0, 1))])
+
 """
     def test_(self):
         self.assertLexes("",

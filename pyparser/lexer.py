@@ -522,16 +522,23 @@ class Lexer:
             ranges.append(("{", self.curly_braces[-1]))
 
         ranges.sort(key=lambda k: k[1].begin_pos)
-        compl_kind, compl_range = ranges[-1]
-        if compl_kind != expected:
-            note = diagnostic.Diagnostic(
-                "note", "'{delimiter}' opened here",
-                {"delimiter": compl_kind},
-                compl_range)
+        if any(ranges):
+            compl_kind, compl_range = ranges[-1]
+            if compl_kind != expected:
+                note = diagnostic.Diagnostic(
+                    "note", "'{delimiter}' opened here",
+                    {"delimiter": compl_kind},
+                    compl_range)
+                error = diagnostic.Diagnostic(
+                    "fatal", "mismatched '{delimiter}'",
+                    {"delimiter": range.source()},
+                    range, notes=[note])
+                raise diagnostic.DiagnosticException(error)
+        else:
             error = diagnostic.Diagnostic(
                 "fatal", "mismatched '{delimiter}'",
                 {"delimiter": range.source()},
-                range, notes=[note])
+                range)
             raise diagnostic.DiagnosticException(error)
 
     def __iter__(self):

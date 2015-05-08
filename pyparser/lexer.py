@@ -299,14 +299,14 @@ class Lexer:
             self.queue.append(Token(tok_range, "newline"))
             return
 
+        if match.group(4) is not None: # comment
+            self.comments.append((tok_range, match.group(4)))
+            return self._refill(eof_token)
+
         # Lexing non-whitespace now.
         self.new_line = False
 
-        if match.group(4) is not None: # comment
-            self.comments.append((tok_range, match.group(4)))
-            self._refill(eof_token)
-
-        elif match.group(5) is not None: # floating point or complex literal
+        if match.group(5) is not None: # floating point or complex literal
             if match.group(6) is None:
                 self.queue.append(Token(tok_range, "float", float(match.group(5))))
             else:

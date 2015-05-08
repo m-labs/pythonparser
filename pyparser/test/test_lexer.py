@@ -65,6 +65,15 @@ class LexerTestCase(unittest.TestCase):
         self.assertEqual([(source.Range(self.buffer, 0, 5), "# foo")],
                          self.lexer.comments)
 
+        self.assertLexes("class x:\n  # foo\n  pass",
+                         "class",   None,
+                         "ident",   "x",
+                         ":",       None,
+                         "newline", None,
+                         "indent",  None,
+                         "pass",    None,
+                         "dedent",  None)
+
     def test_float(self):
         self.assertLexes("0.0",
                          "float", 0.0)

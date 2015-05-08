@@ -23,9 +23,12 @@ def parse(source, filename='<unknown>', mode='exec',
         if the source code is not well-formed
     """
     buffer = pyparser.source.Buffer(source, filename)
-    lexer  = pyparser.lexer.Lexer(buffer, version)
-    parser = pyparser.parser.Parser(lexer)
 
+    lexer = pyparser.lexer.Lexer(buffer, version)
+    if mode in ('single', 'eval'):
+        lexer.interactive = True
+
+    parser = pyparser.parser.Parser(lexer)
     parser.add_flags(flags)
 
     if mode == 'exec':

@@ -46,14 +46,7 @@ _all_rules = []
 
 # Generic LL parsing combinators
 class Unmatched:
-    def __init__(self, diagnostic=None):
-        self.diagnostic = diagnostic
-
-    def __repr__(self):
-        if self.diagnostic:
-            return "<can't parse: %s>" % repr(self.diagnostic)
-        else:
-            return "<can't parse>"
+    pass
 
 unmatched = Unmatched()
 
@@ -67,7 +60,7 @@ def llrule(loc, expected, cases=1):
             if cases == 1:
                 def rule(*args, **kwargs):
                     result = inner_rule(*args, **kwargs)
-                    if not isinstance(result, Unmatched):
+                    if result is not unmatched:
                         rule.covered[0] = True
                     return result
             else:
@@ -93,7 +86,7 @@ def action(inner_rule, loc=None):
         @llrule(loc, inner_rule.expected)
         def outer_rule(parser):
             result = inner_rule(parser)
-            if isinstance(result, Unmatched):
+            if result is unmatched:
                 return result
             if isinstance(result, tuple):
                 return mapper(parser, *result)
@@ -121,7 +114,7 @@ def Loc(kind, loc=None):
     @llrule(loc, lambda parser: [kind])
     def rule(parser):
         result = parser._accept(kind)
-        if isinstance(result, Unmatched):
+        if result is unmatched:
             return result
         return result.loc
     return rule
@@ -138,19 +131,23 @@ def Expect(inner_rule, loc=None):
     @llrule(loc, inner_rule.expected)
     def rule(parser):
         result = inner_rule(parser)
-        if isinstance(result, Unmatched):
-            expected = inner_rule.expected(parser)
+        if result is unmatched:
+            expected = reduce(list.__add__, [rule.expected(parser) for rule in parser._errrules])
+            expected = list(sorted(set(expected)))
+
             if len(expected) > 1:
                 expected = ' or '.join([', '.join(expected[0:-1]), expected[-1]])
             elif len(expected) == 1:
                 expected = expected[0]
             else:
                 expected = '(impossible)'
+
+            error_tok = parser._tokens[parser._errindex]
             error = diagnostic.Diagnostic(
                 "error", "unexpected {actual}: expected {expected}",
-                {'actual': parser.token.kind, 'expected': expected},
-                parser.token.loc)
-            return Unmatched(diagnostic.DiagnosticException(error))
+                {'actual': error_tok.kind, 'expected': expected},
+                error_tok.loc)
+            raise diagnostic.DiagnosticException(error)
         return result
     return rule
 
@@ -162,13 +159,13 @@ def Seq(first_rule, *rest_of_rules, **kwargs):
     @llrule(kwargs.get('loc', None), first_rule.expected)
     def rule(parser):
         result = first_rule(parser)
-        if isinstance(result, Unmatched):
+        if result is unmatched:
             return result
 
         results = [result]
         for rule in rest_of_rules:
             result = rule(parser)
-            if isinstance(result, Unmatched):
+            if result is unmatched:
                 return result
             results.append(result)
         return tuple(results)
@@ -198,8 +195,8 @@ def Alt(*inner_rules, **kwargs):
             data = parser._save()
             for idx, inner_rule in enumerate(inner_rules):
                 result = inner_rule(parser)
-                if isinstance(result, Unmatched):
-                    parser._restore(data)
+                if result is unmatched:
+                    parser._restore(data, rule=inner_rule)
                 else:
                     rule.covered[idx] = True
                     return result
@@ -210,8 +207,8 @@ def Alt(*inner_rules, **kwargs):
             data = parser._save()
             for inner_rule in inner_rules:
                 result = inner_rule(parser)
-                if isinstance(result, Unmatched):
-                    parser._restore(data)
+                if result is unmatched:
+                    parser._restore(data, rule=inner_rule)
                 else:
                     return result
             return unmatched
@@ -232,8 +229,8 @@ def Star(inner_rule, loc=None):
         while True:
             data = parser._save()
             result = inner_rule(parser)
-            if isinstance(result, Unmatched):
-                parser._restore(data)
+            if result is unmatched:
+                parser._restore(data, rule=inner_rule)
                 return results
             results.append(result)
     return rule
@@ -246,15 +243,15 @@ def Plus(inner_rule, loc=None):
     @llrule(loc, inner_rule.expected)
     def rule(parser):
         result = inner_rule(parser)
-        if isinstance(result, Unmatched):
+        if result is unmatched:
             return result
 
         results = [result]
         while True:
             data = parser._save()
             result = inner_rule(parser)
-            if isinstance(result, Unmatched):
-                parser._restore(data)
+            if result is unmatched:
+                parser._restore(data, rule=inner_rule)
                 return results
             results.append(result)
     return rule
@@ -280,19 +277,19 @@ def List(inner_rule, separator_tok, trailing, leading=True, loc=None):
 
             if leading:
                 result = inner_rule(parser)
-                if isinstance(result, Unmatched):
+                if result is unmatched:
                     return result
                 else:
                     results.append(result)
 
             while True:
                 result = separator_rule(parser)
-                if isinstance(result, Unmatched):
+                if result is unmatched:
                     results.trailing_comma = None
                     return results
 
                 result_1 = inner_rule(parser)
-                if isinstance(result_1, Unmatched):
+                if result_1 is unmatched:
                     results.trailing_comma = result
                     return results
                 else:
@@ -305,7 +302,7 @@ def Newline(loc=None):
     @llrule(loc, lambda parser: ['newline'])
     def rule(parser):
         result = parser._accept('newline')
-        if isinstance(result, Unmatched):
+        if result is unmatched:
             return result
         return []
     return rule
@@ -352,17 +349,31 @@ class Parser:
 
     # Generic LL parsing methods
     def __init__(self, lexer):
-        self.lexer   = lexer
-        self._tokens = []
-        self._index  = -1
+        self.lexer     = lexer
+        self._tokens   = []
+        self._index    = -1
+        self._errindex = -1
+        self._errrules = []
         self._advance()
 
     def _save(self):
         return self._index
 
-    def _restore(self, data):
+    def _restore(self, data, rule):
         self._index = data
         self._token = self._tokens[self._index]
+
+        if self._index > self._errindex:
+            # We have advanced since last error
+            self._errindex = self._index
+            self._errrules = [rule]
+        elif self._index == self._errindex:
+            # We're at the same place as last error
+            self._errrules.append(rule)
+        else:
+            # We've backtracked far and are now just failing the
+            # whole parse
+            pass
 
     def _advance(self):
         self._index += 1
@@ -404,22 +415,22 @@ class Parser:
         if 'print_function' in flags:
             self.lexer.print_function = True
 
-    @action(Alt(Newline(),
-                Rule('simple_stmt'),
-                SeqN(0, Rule('compound_stmt'), Newline())))
+    @action(Expect(Alt(Newline(),
+                       Rule('simple_stmt'),
+                       SeqN(0, Rule('compound_stmt'), Newline()))))
     def single_input(self, body):
         """single_input: NEWLINE | simple_stmt | compound_stmt NEWLINE"""
         loc = None if body == [] else body[0].loc
         return ast.Interactive(body=body, loc=loc)
 
-    @action(SeqN(0, Star(Alt(Newline(), Rule('stmt'))), Tok('eof')))
+    @action(Expect(SeqN(0, Star(Alt(Newline(), Rule('stmt'))), Tok('eof'))))
     def file_input(parser, body):
         """file_input: (NEWLINE | stmt)* ENDMARKER"""
         body = reduce(list.__add__, body, [])
         loc = None if body == [] else body[0].loc
         return ast.Module(body=body, loc=loc)
 
-    @action(SeqN(0, Rule('testlist'), Star(Tok('newline')), Tok('eof')))
+    @action(Expect(SeqN(0, Rule('testlist'), Star(Tok('newline')), Tok('eof'))))
     def eval_input(self, expr):
         """eval_input: testlist NEWLINE* ENDMARKER"""
         return ast.Expression(body=[expr], loc=expr.loc)

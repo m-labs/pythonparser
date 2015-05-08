@@ -360,6 +360,9 @@ class Parser:
         return self._index
 
     def _restore(self, data, rule):
+        if self._index == data:
+            return
+
         self._index = data
         self._token = self._tokens[self._index]
 
@@ -1341,27 +1344,34 @@ class Parser:
                 call.args.append(arg)
         return call
 
-    @action(Seq(Rule('test'), Loc('='), Rule('test')))
-    def argument_1(self, lhs, equals_loc, rhs):
-        if not isinstance(lhs, ast.Name):
-            error = diagnostic.Diagnostic(
-                "error", "keyword must be an identifier", {}, lhs.loc)
-            raise diagnostic.DiagnosticException(error)
-        return ast.keyword(arg=lhs.id, value=rhs,
-                           loc=lhs.loc.join(rhs.loc),
-                           arg_loc=lhs.loc, equals_loc=equals_loc)
+    @action(Seq(Loc('='), Rule('test')))
+    def argument_1(self, equals_loc, rhs):
+        def thunk(lhs):
+            if not isinstance(lhs, ast.Name):
+                error = diagnostic.Diagnostic(
+                    "error", "keyword must be an identifier", {}, lhs.loc)
+                raise diagnostic.DiagnosticException(error)
+            return ast.keyword(arg=lhs.id, value=rhs,
+                               loc=lhs.loc.join(rhs.loc),
+                               arg_loc=lhs.loc, equals_loc=equals_loc)
+        return thunk
 
-    @action(Seq(Rule('test'), Opt(Rule('gen_for'))))
-    def argument_2(self, lhs, compose_opt):
-        if compose_opt:
-            generators = compose_opt([])
-            return ast.GeneratorExp(elt=lhs, generators=generators,
-                                    begin_loc=None, end_loc=None,
-                                    loc=lhs.loc.join(generators[-1].loc))
-        return lhs
+    @action(Opt(Rule('gen_for')))
+    def argument_2(self, compose_opt):
+        def thunk(lhs):
+            if compose_opt:
+                generators = compose_opt([])
+                return ast.GeneratorExp(elt=lhs, generators=generators,
+                                        begin_loc=None, end_loc=None,
+                                        loc=lhs.loc.join(generators[-1].loc))
+            return lhs
+        return thunk
 
-    argument = Alt(argument_1, argument_2)
-    """argument: test [gen_for] | test '=' test  # Really [keyword '='] test"""
+    @action(Seq(Rule('test'), Alt(argument_1, argument_2)))
+    def argument(self, lhs, thunk):
+        # This rule is reformulated to avoid exponential backtracking.
+        """argument: test [gen_for] | test '=' test  # Really [keyword '='] test"""
+        return thunk(lhs)
 
     list_iter = Alt(Rule("list_for"), Rule("list_if"))
     """list_iter: list_for | list_if"""

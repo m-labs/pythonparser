@@ -6,29 +6,35 @@ It parses source code into an AST that is a superset of Python's
 built-in :mod:`ast` module, but returns precise location information
 for every token.
 
-:mod:`source` Module
---------------------
+:mod:`pyparser` Module
+----------------------
+
+.. automodule:: pyparser
+    :members:
+
+:mod:`pyparser.source` Module
+-----------------------------
 
 .. automodule:: pyparser.source
     :members:
     :show-inheritance:
 
-:mod:`diagnostic` Module
-------------------------
+:mod:`pyparser.diagnostic` Module
+---------------------------------
 
 .. automodule:: pyparser.diagnostic
     :members:
     :show-inheritance:
 
-:mod:`lexer` Module
--------------------
+:mod:`pyparser.lexer` Module
+----------------------------
 
 .. automodule:: pyparser.lexer
     :members:
     :show-inheritance:
 
-:mod:`ast` Module
------------------
+:mod:`pyparser.ast` Module
+--------------------------
 
 .. automodule:: pyparser.ast
     :members: commonloc, beginendloc, keywordloc,

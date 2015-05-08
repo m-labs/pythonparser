@@ -1409,28 +1409,3 @@ class Parser:
         """yield_expr: 'yield' [testlist]"""
         return ast.Yield(value=exprs,
                          yield_loc=stmt_loc, loc=stmt_loc.join(exprs.loc))
-
-import sys
-
-def for_code(code, version=sys.version_info[0:2]):
-    return Parser(lexer.Lexer(source.Buffer(code), version))
-
-def main():
-    import time, codecs
-    for filename in sys.argv[1:]:
-        with codecs.open(filename, encoding='utf-8') as f:
-            input = f.read()
-            try:
-                start = time.time()
-                root = for_code(input).file_input()
-                interval = time.time() - start
-
-                print(root)
-                print("elapsed: %.2f (%.2f kb/s)" % (interval, len(input)/interval/1000),
-                      file=sys.stderr)
-            except diagnostic.DiagnosticException as e:
-                print(e.render,
-                      file=sys.stderr)
-
-if __name__ == "__main__":
-    main()

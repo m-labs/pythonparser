@@ -397,9 +397,22 @@ class Parser:
         else:
             return elts[0]
 
-    def _assignable(self, node):
-        # TODO
-        return node
+    def _assignable(self, node, is_delete=False):
+        if isinstance(node, ast.Name) or isinstance(node, ast.Subscript) or \
+                isinstance(node, ast.Attribute):
+            return node
+        elif (isinstance(node, ast.List) or isinstance(node, ast.Tuple)) and \
+                any(node.elts):
+            node.elts = [self._assignable(elt, is_delete) for elt in node.elts]
+            return node
+        else:
+            if is_delete:
+                error = diagnostic.Diagnostic(
+                    "error", "cannot delete this expression", {}, node.loc)
+            else:
+                error = diagnostic.Diagnostic(
+                    "error", "cannot assign to this expression", {}, node.loc)
+            raise diagnostic.DiagnosticException(error)
 
     def _empty_arguments(self):
         return ast.arguments(args=[], defaults=[], vararg=None, kwarg=None,
@@ -635,7 +648,7 @@ class Parser:
         # Python uses exprlist here, but does *not* obey the usual
         # tuple-wrapping semantics, so we embed the rule directly.
         """del_stmt: 'del' exprlist"""
-        return ast.Delete(targets=list(map(self._assignable, exprs)),
+        return ast.Delete(targets=[self._assignable(expr, is_delete=True) for expr in exprs],
                           loc=stmt_loc.join(exprs[-1].loc), keyword_loc=stmt_loc)
 
     @action(Loc('pass'))

@@ -144,7 +144,7 @@ def Expect(inner_rule, loc=None):
 
             error_tok = parser._tokens[parser._errindex]
             error = diagnostic.Diagnostic(
-                "error", "unexpected {actual}: expected {expected}",
+                "fatal", "unexpected {actual}: expected {expected}",
                 {'actual': error_tok.kind, 'expected': expected},
                 error_tok.loc)
             raise diagnostic.DiagnosticException(error)
@@ -360,9 +360,6 @@ class Parser:
         return self._index
 
     def _restore(self, data, rule):
-        if self._index == data:
-            return
-
         self._index = data
         self._token = self._tokens[self._index]
 
@@ -411,10 +408,10 @@ class Parser:
         else:
             if is_delete:
                 error = diagnostic.Diagnostic(
-                    "error", "cannot delete this expression", {}, node.loc)
+                    "fatal", "cannot delete this expression", {}, node.loc)
             else:
                 error = diagnostic.Diagnostic(
-                    "error", "cannot assign to this expression", {}, node.loc)
+                    "fatal", "cannot assign to this expression", {}, node.loc)
             raise diagnostic.DiagnosticException(error)
 
     def _empty_arguments(self):
@@ -537,15 +534,17 @@ class Parser:
                          ('*' NAME [',' '**' NAME] | '**' NAME) |
                          fpdef ['=' test] (',' fpdef ['=' test])* [','])"""
         for fparam, default_opt in fparams:
-            args.args.append(fparam)
             if default_opt:
                 equals_loc, default = default_opt
                 args.equals_locs.append(equals_loc)
                 args.defaults.append(default)
             elif len(args.defaults) > 0:
                 error = diagnostic.Diagnostic(
-                    "error", "non-default argument follows default argument", {}, fparam.loc)
+                    "fatal", "non-default argument follows default argument", {},
+                    fparam.loc, [args.args[-1].loc.join(args.defaults[-1].loc)])
                 raise diagnostic.DiagnosticException(error)
+
+            args.args.append(fparam)
 
         def fparam_loc(fparam, default_opt):
             if default_opt:
@@ -603,9 +602,10 @@ class Parser:
         """expr_stmt: testlist (augassign (yield_expr|testlist) |
                                 ('=' (yield_expr|testlist))*)"""
         if isinstance(rhs, ast.AugAssign):
-            if isinstance(lhs, ast.Tuple):
+            if isinstance(lhs, ast.Tuple) or isinstance(lhs, ast.List):
                 error = diagnostic.Diagnostic(
-                    "error", "illegal expression for augmented assignment", {}, rhs.loc)
+                    "fatal", "illegal expression for augmented assignment", {},
+                    rhs.op.loc, [lhs.loc])
                 raise diagnostic.DiagnosticException(error)
             else:
                 rhs.target = self._assignable(lhs)
@@ -859,14 +859,16 @@ class Parser:
         for elif_ in elifs:
             stmt.keyword_loc, stmt.test, stmt.if_colon_loc, stmt.body = elif_
             stmt.loc = stmt.keyword_loc.join(stmt.body[-1].loc)
-            if stmt.orelse: stmt.loc = stmt.loc.join(stmt.orelse[-1].loc)
+            if stmt.orelse:
+                stmt.loc = stmt.loc.join(stmt.orelse[-1].loc)
             stmt = ast.If(orelse=[stmt],
                           else_loc=None, else_colon_loc=None)
 
         stmt.keyword_loc, stmt.test, stmt.if_colon_loc, stmt.body = \
             if_loc, test, if_colon_loc, body
         stmt.loc = stmt.keyword_loc.join(stmt.body[-1].loc)
-        if stmt.orelse: stmt.loc = stmt.loc.join(stmt.orelse[-1].loc)
+        if stmt.orelse:
+            stmt.loc = stmt.loc.join(stmt.orelse[-1].loc)
         return stmt
 
     @action(Seq(Loc('while'), Rule('test'), Loc(':'), Rule('suite'),
@@ -1307,7 +1309,8 @@ class Parser:
         for postarg in postargs:
             if not isinstance(postarg, ast.keyword):
                 error = diagnostic.Diagnostic(
-                    "error", "only named arguments may follow *expression", {}, postarg.loc)
+                    "fatal", "only named arguments may follow *expression", {},
+                    postarg.loc, [star_loc.join(stararg.loc)])
                 raise diagnostic.DiagnosticException(error)
 
         return postargs, \
@@ -1344,7 +1347,8 @@ class Parser:
                 call.keywords.append(arg)
             elif len(call.keywords) > 0:
                 error = diagnostic.Diagnostic(
-                    "error", "non-keyword arg after keyword arg", {}, arg.loc)
+                    "fatal", "non-keyword arg after keyword arg", {},
+                    arg.loc, [call.keywords[-1].loc])
                 raise diagnostic.DiagnosticException(error)
             else:
                 call.args.append(arg)
@@ -1355,7 +1359,7 @@ class Parser:
         def thunk(lhs):
             if not isinstance(lhs, ast.Name):
                 error = diagnostic.Diagnostic(
-                    "error", "keyword must be an identifier", {}, lhs.loc)
+                    "fatal", "keyword must be an identifier", {}, lhs.loc)
                 raise diagnostic.DiagnosticException(error)
             return ast.keyword(arg=lhs.id, value=rhs,
                                loc=lhs.loc.join(rhs.loc),

@@ -69,7 +69,7 @@ class ParserTestCase(unittest.TestCase):
     _loc_re  = re.compile(r"\s*([~^]*)<?\s+([a-z_0-9.]+)")
     _path_re = re.compile(r"(([a-z_]+)|([0-9]+))(\.)?")
 
-    def match_loc(self, ast, matcher, root=lambda x: x):
+    def match_loc(self, ast, matcher, root=lambda x: (0, x)):
         offset, ast = root(ast)
 
         matcher_pos = 0
@@ -142,24 +142,24 @@ class ParserTestCase(unittest.TestCase):
         ast = getattr(self.parser_for(code, interactive=interactive), mode)()
         self.assertEqual(expected_flat_ast, self.flatten_ast(ast))
 
-    def assertDiagnoses(self, code, diag):
+    def assertDiagnoses(self, code, level, reason, args={}, loc_matcher=""):
         try:
             self.parser_for(code).file_input()
             self.fail("Expected a diagnostic")
         except diagnostic.DiagnosticException as e:
-            level, reason, args, loc = diag
             self.assertEqual(level, e.diagnostic.level)
             self.assertEqual(reason, e.diagnostic.reason)
             for key in args:
                 self.assertEqual(args[key], e.diagnostic.arguments[key],
                                  "{{%s}}: \"%s\" != \"%s\"" %
                                     (key, args[key], e.diagnostic.arguments[key]))
-            self.assertEqual(source.Range(self.source_buffer, *loc),
-                             e.diagnostic.location)
+            self.match_loc([e.diagnostic.location] + e.diagnostic.highlights,
+                           loc_matcher)
 
-    def assertDiagnosesUnexpected(self, code, err_token, loc):
+    def assertDiagnosesUnexpected(self, code, err_token, loc_matcher=""):
         self.assertDiagnoses(code,
-            ("error", "unexpected {actual}: expected {expected}", {'actual': err_token}, loc))
+            "fatal", "unexpected {actual}: expected {expected}",
+            {'actual': err_token}, loc_matcher="")
 
     # Fixtures
 
@@ -806,6 +806,14 @@ class ParserTestCase(unittest.TestCase):
             "x = yield y",
             "~~~~~~~~~~~ 0.loc")
 
+    def test_assign_tuplerhs(self):
+        self.assertParsesSuite(
+            [{'ty': 'Assign', 'targets': [self.ast_x], 'value':
+                {'ty': 'Tuple', 'ctx': None, 'elts': [self.ast_1, self.ast_2]}}],
+            "x = 1, 2",
+            "    ~~~~ 0.value.loc"
+            "~~~~~~~~ 0.loc")
+
     def test_augassign(self):
         self.assertParsesSuite(
             [{'ty': 'AugAssign', 'op': {'ty': 'Add'}, 'target': self.ast_x, 'value': self.ast_1}],
@@ -904,6 +912,13 @@ class ParserTestCase(unittest.TestCase):
             "~~~~~ 0.keyword_loc"
             "      ~~ 0.dest_loc"
             "~~~~~~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Print', 'dest': self.ast_2, 'values': [self.ast_1], 'nl': False}],
+            "print >>2, 1,",
+            "~~~~~ 0.keyword_loc"
+            "      ~~ 0.dest_loc"
+            "~~~~~~~~~~~~~ 0.loc")
 
     def test_del(self):
         self.assertParsesSuite(
@@ -1520,3 +1535,71 @@ class ParserTestCase(unittest.TestCase):
                 {'ty': 'Call', 'func': {'ty': 'Name', 'id': 'print', 'ctx': None},
                  'starargs': None, 'kwargs': None, 'args': [self.ast_x], 'keywords': []}}],
             "from __future__ import print_function·print(x)")
+
+    #
+    # DIAGNOSTICS
+    #
+
+    def test_diag_assignable(self):
+        self.assertDiagnoses(
+            "1 = 1",
+            'fatal', "cannot assign to this expression", {},
+            "^ 0")
+
+        self.assertDiagnoses(
+            "[1] = 1",
+            'fatal', "cannot assign to this expression", {},
+            " ^ 0")
+
+        self.assertDiagnoses(
+            "x() = 1",
+            'fatal', "cannot assign to this expression", {},
+            "~~~ 0")
+
+        self.assertDiagnoses(
+            "del 1",
+            'fatal', "cannot delete this expression", {},
+            "    ^ 0")
+
+    def test_diag_def(self):
+        self.assertDiagnoses(
+            "def x(y=1, z): pass",
+            'fatal', "non-default argument follows default argument", {},
+            "           ^ 0"
+            "      ~~~ 1")
+
+    def test_diag_augassign(self):
+        self.assertDiagnoses(
+            "(1,) += 1",
+            'fatal', "illegal expression for augmented assignment", {},
+            "     ^^ 0"
+            "~~~~ 1")
+
+        self.assertDiagnoses(
+            "[1] += 1",
+            'fatal', "illegal expression for augmented assignment", {},
+            "    ^^ 0"
+            "~~~ 1")
+
+    def test_diag_call(self):
+        self.assertDiagnoses(
+            "x(*y, z)",
+            'fatal', "only named arguments may follow *expression", {},
+            "      ^ 0"
+            "  ~~ 1")
+
+        self.assertDiagnoses(
+            "x(y=1, z)",
+            'fatal', "non-keyword arg after keyword arg", {},
+            "       ^ 0"
+            "  ~~~ 1")
+
+        self.assertDiagnoses(
+            "x(1=1)",
+            'fatal', "keyword must be an identifier", {},
+            "  ^ 0")
+
+    def test_diag_generic(self):
+        self.assertDiagnosesUnexpected(
+            "x + ,", ",",
+            "    ^ 0")

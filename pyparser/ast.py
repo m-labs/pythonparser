@@ -12,10 +12,13 @@ has a special meaning: it encompasses the entire AST node, so that it is possibl
 to cut the range contained inside ``loc`` of a parsetree fragment and paste it
 somewhere else without altering said parsetree fragment that.
 
-The AST format for all supported versions is generally normalized to match the native
-:mod:`..ast` module of the latest supported Python version. In particular this affects:
+The AST format for all supported versions is generally normalized to be a superset
+of the native :mod:`..ast` module of the latest supported Python version.
+In particular this affects:
 
     * :class:`With`: on 2.6-2.7 it uses the 3.0 format.
+    * :class:`arguments`: on 2.6-3.1 it uses the 3.2 format, with dedicated
+            :class:`arg` in ``vararg`` and ``kwarg`` slots.
 """
 
 from __future__ import absolute_import, division, print_function, unicode_literals

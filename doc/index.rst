@@ -46,7 +46,7 @@ for every token.
       expr, BinOp, BoolOp, Call, Compare, Dict, DictComp, GeneratorExp, IfExp, Lambda,
       List, ListComp, Name, Num, Repr, Set, SetComp, Str, Subscript, Tuple, UnaryOp, Yield,
       keyword,
-      mod, Expression, Interactive, Module, Suite,
+      mod, Expression, Interactive, Module,
       operator, Add, BitAnd, BitOr, BitXor, Div, FloorDiv, LShift, Mod, Mult, Pow, RShift, Sub,
       slice, Ellipsis, ExtSlice, Index, Slice,
       stmt, Assert, Assign, AugAssign, Break, ClassDef, Continue, Delete, Exec, Expr, For,

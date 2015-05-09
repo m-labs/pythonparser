@@ -32,14 +32,20 @@ class ParserTestCase(unittest.TestCase):
         return self.parser
 
     def flatten_ast(self, node):
-        # Validate locs
+        # Validate locs and fields
         for attr in node.__dict__:
-            if attr.endswith('_loc') or attr.endswith('_locs'):
+            if attr.endswith('loc') or attr.endswith('_locs'):
                 self.assertTrue(attr in node._locs,
                                 "%s not in %s._locs" % (attr, repr(node)))
+            else:
+                self.assertTrue(attr in node._fields,
+                                "%s not in %s._fields" % (attr, repr(node)))
         for loc in node._locs:
             self.assertTrue(loc in node.__dict__,
-                            "%s not in %s._locs" % (loc, repr(node)))
+                            "loc %s not in %s" % (loc, repr(node)))
+        for field in node._fields:
+            self.assertTrue(field in node.__dict__,
+                            "field %s not in %s" % (field, repr(node)))
 
         flat_node = { 'ty': unicode(type(node).__name__) }
         for field in node._fields:
@@ -59,9 +65,9 @@ class ParserTestCase(unittest.TestCase):
                 continue
 
             value = getattr(node, field)
-            if isinstance(value, ast.AST):
+            if isinstance(value, pyast.AST):
                 value = self.flatten_python_ast(value)
-            if isinstance(value, list) and len(value) > 0 and isinstance(value[0], ast.AST):
+            if isinstance(value, list) and len(value) > 0 and isinstance(value[0], pyast.AST):
                 value = list(map(self.flatten_python_ast, value))
             flat_node[unicode(field)] = value
         return flat_node

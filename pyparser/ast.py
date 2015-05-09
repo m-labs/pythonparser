@@ -3,17 +3,17 @@
 """
 The :mod:`ast` module contains the classes comprising the Python abstract syntax tree.
 
-Every node class is inherited from the corresponding Python :mod:`..ast` class,
-if one exists in the version of Python that is running.
-
 All attributes ending with ``loc`` contain instances of :class:`.source.Range`
 or None. All attributes ending with ``_locs`` contain lists of instances of
 :class:`.source.Range` or [].
+
+The attribute ``loc``, present in every class except those inheriting :class:`boolop`,
+has a special meaning: it encompasses the entire AST node, so that it is possible
+to cut the range contained inside ``loc`` of a parsetree fragment and paste it
+somewhere else without altering said parsetree fragment that.
 """
 
 from __future__ import absolute_import, division, print_function, unicode_literals
-from .shim import ast
-from .shim.ast import AST
 
 # Location mixins
 
@@ -21,8 +21,6 @@ class commonloc(object):
     """
     A mixin common for all nodes.
 
-    :cvar _fields: (tuple of strings) (defined in Python)
-        names of all attributes with semantic values
     :cvar _locs: (tuple of strings)
         names of all attributes with location values
 
@@ -65,7 +63,20 @@ class beginendloc(commonloc):
 
 # AST nodes
 
-class alias(commonloc, ast.alias):
+class AST:
+    """
+    An ancestor of all nodes.
+
+    :cvar _fields: (tuple of strings)
+        names of all attributes with semantic values
+    """
+    _fields = ()
+
+    def __init__(self, **fields):
+        for field in fields:
+            setattr(self, field, fields[field])
+
+class alias(AST, commonloc):
     """
     An import alias, e.g. ``x as y``.
 
@@ -75,9 +86,10 @@ class alias(commonloc, ast.alias):
     :ivar as_loc: location of ``as``
     :ivar asname_loc: location of asname
     """
+    _fields = ('name', 'asname')
     _locs = commonloc._locs + ('name_loc', 'as_loc', 'asname_loc')
 
-class arguments(beginendloc, ast.arguments):
+class arguments(AST, beginendloc):
     """
     Function definition arguments, e.g. in ``def f(x, y=1, *z, **t)``.
 
@@ -91,10 +103,11 @@ class arguments(beginendloc, ast.arguments):
     :ivar kwarg_loc: location of keyword splat formal argument, if any
     :ivar equals_locs: locations of ``=``
     """
+    _fields = ('args', 'vararg', 'kwarg', 'defaults')
     _locs = beginendloc._locs + ('star_loc', 'vararg_loc', 'dstar_loc',
                                  'vararg_loc', 'kwarg_loc', 'equals_locs')
 
-class boolop:
+class boolop(AST, commonloc):
     """
     Base class for binary boolean operators.
 
@@ -103,35 +116,35 @@ class boolop:
     itself; locations are recorded in :class:`BoolOp`.
     """
     _locs = ()
-class And(boolop, ast.And):
+class And(boolop):
     """The ``and`` operator."""
-class Or(boolop, ast.Or):
+class Or(boolop):
     """The ``or`` operator."""
 
-class cmpop(commonloc):
+class cmpop(AST, commonloc):
     """Base class for comparison operators."""
-class Eq(cmpop, ast.Eq):
+class Eq(cmpop):
     """The ``==`` operator."""
-class Gt(cmpop, ast.Gt):
+class Gt(cmpop):
     """The ``>`` operator."""
-class GtE(cmpop, ast.GtE):
+class GtE(cmpop):
     """The ``>=`` operator."""
-class In(cmpop, ast.In):
+class In(cmpop):
     """The ``in`` operator."""
-class Is(cmpop, ast.Is):
+class Is(cmpop):
     """The ``is`` operator."""
-class IsNot(cmpop, ast.IsNot):
+class IsNot(cmpop):
     """The ``is not`` operator."""
-class Lt(cmpop, ast.Lt):
+class Lt(cmpop):
     """The ``<`` operator."""
-class LtE(cmpop, ast.LtE):
+class LtE(cmpop):
     """The ``<=`` operator."""
-class NotEq(cmpop, ast.NotEq):
+class NotEq(cmpop):
     """The ``!=`` (or deprecated ``<>``) operator."""
-class NotIn(cmpop, ast.NotIn):
+class NotIn(cmpop):
     """The ``not in`` operator."""
 
-class comprehension(commonloc, ast.comprehension):
+class comprehension(AST, commonloc):
     """
     A single ``for`` list comprehension clause.
 
@@ -142,11 +155,12 @@ class comprehension(commonloc, ast.comprehension):
     :ivar in_loc: location of the ``in`` keyword
     :ivar if_locs: locations of ``if`` keywords
     """
+    _fields = ('target', 'iter', 'ifs')
     _locs = commonloc._locs + ('for_loc', 'in_loc', 'if_locs')
 
-class excepthandler(commonloc):
+class excepthandler(AST, commonloc):
     """Base class for the exception handler."""
-class ExceptHandler(excepthandler, ast.ExceptHandler):
+class ExceptHandler(excepthandler):
     """
     An exception handler, e.g. ``except x as y:·  z``.
 
@@ -157,19 +171,21 @@ class ExceptHandler(excepthandler, ast.ExceptHandler):
     :ivar as_loc: location of ``as``, if any
     :ivar colon_loc: location of ``:``
     """
+    _fields = ('type', 'name', 'body')
     _locs = excepthandler._locs + ('except_loc', 'as_loc', 'colon_loc')
 
-class expr(commonloc):
+class expr(AST, commonloc):
     """Base class for expression nodes."""
-class Attribute(expr, ast.Attribute):
+class Attribute(expr):
     """
     An attribute access, e.g. ``x.y``.
 
     :ivar value: (node) left-hand side
     :ivar attr: (string) attribute name
     """
+    _fields = ('value', 'attr', 'ctx')
     _locs = expr._locs + ('dot_loc', 'attr_loc')
-class BinOp(expr, ast.BinOp):
+class BinOp(expr):
     """
     A binary operation, e.g. ``x + y``.
 
@@ -177,17 +193,18 @@ class BinOp(expr, ast.BinOp):
     :ivar op: (:class:`operator`) operator
     :ivar right: (node) right-hand side
     """
-class BoolOp(expr, ast.BoolOp):
+    _fields = ('left', 'op', 'right')
+class BoolOp(expr):
     """
     A boolean operation, e.g. ``x and y``.
 
-    :ivar left: (node) left-hand side
     :ivar op: (:class:`boolop`) operator
-    :ivar right: (node) right-hand side
+    :ivar values: (list of node) operands
     :ivar op_locs: locations of operators
     """
+    _fields = ('op', 'values')
     _locs = expr._locs + ('op_locs',)
-class Call(beginendloc, expr, ast.Call):
+class Call(expr, beginendloc):
     """
     A function call, e.g. ``f(x, y=1, *z, **t)``.
 
@@ -199,8 +216,9 @@ class Call(beginendloc, expr, ast.Call):
     :ivar star_loc: location of ``*``, if any
     :ivar dstar_loc: location of ``**``, if any
     """
+    _fields = ('func', 'args', 'keywords', 'starargs', 'kwargs')
     _locs = beginendloc._locs + ('star_loc', 'dstar_loc')
-class Compare(expr, ast.Compare):
+class Compare(expr):
     """
     A comparison operation, e.g. ``x < y`` or ``x < y > z``.
 
@@ -208,7 +226,8 @@ class Compare(expr, ast.Compare):
     :ivar ops: (list of :class:`cmpop`) compare operators
     :ivar comparators: (list of node) compare values
     """
-class Dict(beginendloc, expr, ast.Dict):
+    _fields = ('left', 'ops', 'comparators')
+class Dict(expr, beginendloc):
     """
     A dictionary, e.g. ``{x: y}``.
 
@@ -216,23 +235,28 @@ class Dict(beginendloc, expr, ast.Dict):
     :ivar values: (list of node) values
     :ivar colon_locs: ``:`` locations
     """
+    _fields = ('keys', 'values')
     _locs = beginendloc._locs + ('colon_locs',)
-class DictComp(beginendloc, expr, ast.DictComp):
+class DictComp(expr, beginendloc):
     """
     A list comprehension, e.g. ``{x: y for x,y in z}``.
+
+    **Emitted since 2.7.**
 
     :ivar key: (node) key part of comprehension body
     :ivar value: (node) value part of comprehension body
     :ivar generators: (list of :class:`comprehension`) ``for`` clauses
     """
-class GeneratorExp(beginendloc, expr, ast.GeneratorExp):
+    _fields = ('key', 'value', 'generators')
+class GeneratorExp(expr, beginendloc):
     """
     A generator expression, e.g. ``(x for x in y)``.
 
     :ivar elt: (node) expression body
     :ivar generators: (list of :class:`comprehension`) ``for`` clauses
     """
-class IfExp(expr, ast.IfExp):
+    _fields = ('elt', 'generators')
+class IfExp(expr):
     """
     A conditional expression, e.g. ``x if y else z``.
 
@@ -242,8 +266,9 @@ class IfExp(expr, ast.IfExp):
     :ivar if_loc: location of ``if``
     :ivar else_loc: location of ``else``
     """
+    _fields = ('test', 'body', 'orelse')
     _locs = expr._locs + ('if_loc', 'else_loc')
-class Lambda(expr, ast.Lambda):
+class Lambda(expr):
     """
     A lambda expression, e.g. ``lambda x: x*x``.
 
@@ -252,84 +277,103 @@ class Lambda(expr, ast.Lambda):
     :ivar lambda_loc: location of ``lambda``
     :ivar colon_loc: location of ``:``
     """
+    _fields = ('args', 'body')
     _locs = expr._locs + ('lambda_loc', 'colon_loc')
-class List(beginendloc, expr, ast.List):
+class List(expr, beginendloc):
     """
     A list, e.g. ``[x, y]``.
 
     :ivar elts: (list of node) elements
     """
-class ListComp(beginendloc, expr, ast.ListComp):
+    _fields = ('elts', 'ctx')
+class ListComp(expr, beginendloc):
     """
     A list comprehension, e.g. ``[x for x in y]``.
 
     :ivar elt: (node) comprehension body
     :ivar generators: (list of :class:`comprehension`) ``for`` clauses
     """
-class Name(expr, ast.Name):
+    _fields = ('elt', 'generators')
+class Name(expr):
     """
     An identifier, e.g. ``x``.
 
     :ivar id: (string) name
     """
-class Num(expr, ast.Num):
+    _fields = ('id', 'ctx')
+class Num(expr):
     """
     An integer, floating point or complex number, e.g. ``1``, ``1.0`` or ``1.0j``.
 
     :ivar n: (int, float or complex) value
     """
-class Repr(beginendloc, expr, ast.Repr):
+    _fields = ('n',)
+class Repr(expr, beginendloc):
     """
     A repr operation, e.g. ``\`x\```
 
+    **Emitted until 3.0.**
+
     :ivar value: (node) value
     """
-class Set(beginendloc, expr, ast.Set):
+    _fields = ('value',)
+class Set(expr, beginendloc):
     """
     A set, e.g. ``{x, y}``.
 
+    **Emitted since 2.7.**
+
     :ivar elts: (list of node) elements
     """
-class SetComp(beginendloc, expr, ast.ListComp):
+    _fields = ('elts',)
+class SetComp(expr, beginendloc):
     """
     A set comprehension, e.g. ``{x for x in y}``.
+
+    **Emitted since 2.7.**
 
     :ivar elt: (node) comprehension body
     :ivar generators: (list of :class:`comprehension`) ``for`` clauses
     """
-class Str(beginendloc, expr, ast.Str):
+    _fields = ('elt', 'generators')
+class Str(expr, beginendloc):
     """
     A string, e.g. ``"x"``.
 
     :ivar s: (string) value
     """
-class Subscript(beginendloc, expr, ast.Subscript):
+    _fields = ('s',)
+class Subscript(expr, beginendloc):
     """
     A subscript operation, e.g. ``x[1]``.
 
     :ivar value: (node) object being sliced
     :ivar slice: (:class:`slice`) slice
     """
-class Tuple(beginendloc, expr, ast.Tuple):
+    _fields = ('value', 'slice', 'ctx')
+class Tuple(expr, beginendloc):
     """
     A tuple, e.g. ``(x,)`` or ``x,y``.
 
     :ivar elts: (list of nodes) elements
     """
-class UnaryOp(expr, ast.UnaryOp):
+    _fields = ('elts', 'ctx')
+class UnaryOp(expr):
     """
     An unary operation, e.g. ``+x``.
 
     :ivar op: (:class:`unaryop`) operator
     :ivar operand: (node) operand
     """
-class Yield(expr, ast.Yield):
+    _fields = ('op', 'operand')
+class Yield(expr):
     """
     A yield expression, e.g. ``(yield x)``.
 
     :ivar value: (node) yielded value
     :ivar yield_loc: location of ``yield``
     """
+    _fields = ('value',)
     _locs = expr._locs + ('yield_loc',)
 
 # expr_context
@@ -340,7 +384,7 @@ class Yield(expr, ast.Yield):
 #     Param
 #     Store
 
-class keyword(commonloc, ast.keyword):
+class keyword(AST, commonloc):
     """
     A keyword actual argument, e.g. in ``f(x=1)``.
 
@@ -348,66 +392,65 @@ class keyword(commonloc, ast.keyword):
     :ivar value: (node) value
     :ivar equals_loc: location of ``=``
     """
+    _fields = ('arg', 'value')
     _locs = commonloc._locs + ('arg_loc', 'equals_loc')
 
-class mod(commonloc):
+class mod(AST, commonloc):
     """Base class for modules (groups of statements)."""
-class Expression(mod, ast.Expression):
+    _fields = ('body',)
+class Expression(mod):
     """A group of statements parsed as if for :func:`eval`."""
-class Interactive(mod, ast.Interactive):
+class Interactive(mod):
     """A group of statements parsed as if it was REPL input."""
-class Module(mod, ast.Module):
+class Module(mod):
     """A group of statements parsed as if it was a file."""
-class Suite(mod, ast.Suite):
-    """
-    Doesn't appear to be used by Python; included for compatibility
-    with :mod:`ast`.
-    """
 
-class operator(commonloc):
+class operator(AST, commonloc):
     """Base class for numeric binary operators."""
-class Add(operator, ast.Add):
+class Add(operator):
     """The ``+`` operator."""
-class BitAnd(operator, ast.BitAnd):
+class BitAnd(operator):
     """The ``&`` operator."""
-class BitOr(operator, ast.BitOr):
+class BitOr(operator):
     """The ``|`` operator."""
-class BitXor(operator, ast.BitXor):
+class BitXor(operator):
     """The ``^`` operator."""
-class Div(operator, ast.Div):
+class Div(operator):
     """The ``\\`` operator."""
-class FloorDiv(operator, ast.FloorDiv):
+class FloorDiv(operator):
     """The ``\\\\`` operator."""
-class LShift(operator, ast.LShift):
+class LShift(operator):
     """The ``<<`` operator."""
-class Mod(operator, ast.Mod):
+class Mod(operator):
     """The ``%`` operator."""
-class Mult(operator, ast.Mult):
+class Mult(operator):
     """The ``*`` operator."""
-class Pow(operator, ast.Pow):
+class Pow(operator):
     """The ``**`` operator."""
-class RShift(operator, ast.RShift):
+class RShift(operator):
     """The ``>>`` operator."""
-class Sub(operator, ast.Sub):
+class Sub(operator):
     """The ``-`` operator."""
 
-class slice(commonloc):
+class slice(AST, commonloc):
     """Base class for slice operations."""
-class Ellipsis(slice, ast.Ellipsis):
+class Ellipsis(slice):
     """The ellipsis, e.g. in ``x[...]``."""
-class ExtSlice(slice, ast.ExtSlice):
+class ExtSlice(slice):
     """
     The multiple slice, e.g. in ``x[0:1, 2:3]``.
 
     :ivar dims: (:class:`slice`) sub-slices
     """
-class Index(slice, ast.Index):
+    _fields = ('dims',)
+class Index(slice):
     """
     The index, e.g. in ``x[1]``.
 
     :ivar value: (node) index
     """
-class Slice(slice, ast.Slice):
+    _fields = ('value',)
+class Slice(slice):
     """
     The slice, e.g. in ``x[0:1]`` or ``x[0:1:2]``.
 
@@ -417,18 +460,20 @@ class Slice(slice, ast.Slice):
     :ivar bound_colon_loc: location of first semicolon
     :ivar step_colon_loc: location of second semicolon
     """
+    _fields = ('lower', 'upper', 'step')
     _locs = slice._locs + ('bound_colon_loc', 'step_colon_loc')
 
-class stmt(commonloc):
+class stmt(AST, commonloc):
     """Base class for statement nodes."""
-class Assert(keywordloc, stmt, ast.Assert):
+class Assert(stmt, keywordloc):
     """
     The ``assert x, msg`` statement.
 
     :ivar test: (node) condition
     :ivar msg: (node) message, if any
     """
-class Assign(stmt, ast.Assign):
+    _fields = ('test', 'msg')
+class Assign(stmt):
     """
     The ``=`` statement.
 
@@ -436,20 +481,22 @@ class Assign(stmt, ast.Assign):
     :ivar value: (node) right-hand side
     :ivar op_locs: location of equality signs corresponding to ``targets``
     """
+    _fields = ('targets', 'value')
     _locs = stmt._locs + ('op_locs',)
-class AugAssign(stmt, ast.AugAssign):
+class AugAssign(stmt):
     """
     The operator-assignment statement, e.g. ``+=``.
 
     :ivar target: (assignable node) left-hand side
-    :ivar op: (:class:`ast.operator`) operator
+    :ivar op: (:class`) operator
     :ivar value: (node) right-hand side
     """
-class Break(keywordloc, stmt, ast.Break):
+    _fields = ('target', 'op', 'value')
+class Break(stmt, keywordloc):
     """The ``break`` statement."""
-class ClassDef(keywordloc, stmt, ast.ClassDef):
+class ClassDef(stmt, keywordloc):
     """
-    The ``class x(y, z):·  t`` statement.
+    The ``class x(z, y):·  t`` statement.
 
     :ivar name: (string) name
     :ivar bases: (list of node) base classes
@@ -462,18 +509,22 @@ class ClassDef(keywordloc, stmt, ast.ClassDef):
     :ivar colon_loc: location of ``:``
     :ivar at_locs: locations of decorator ``@``
     """
+    _fields = ('name', 'bases', 'body', 'decorator_list')
     _locs = keywordloc._locs + ('name_loc', 'lparen_loc', 'rparen_loc', 'colon_loc', 'at_locs')
-class Continue(keywordloc, stmt, ast.Continue):
+class Continue(stmt, keywordloc):
     """The ``continue`` statement."""
-class Delete(keywordloc, stmt, ast.Delete):
+class Delete(stmt, keywordloc):
     """
     The ``del x, y`` statement.
 
     :ivar targets: (list of :class:`Name`)
     """
-class Exec(keywordloc, stmt, ast.Exec):
+    _fields = ('targets',)
+class Exec(stmt, keywordloc):
     """
     The ``exec code in locals, globals`` statement.
+
+    **Emitted until 3.0.**
 
     :ivar body: (node) code
     :ivar locals: (node) locals
@@ -481,14 +532,16 @@ class Exec(keywordloc, stmt, ast.Exec):
     :ivar keyword_loc: location of ``exec``
     :ivar in_loc: location of ``in``
     """
+    _fields = ('body', 'locals', 'globals')
     _locs = keywordloc._locs + ('in_loc',)
-class Expr(stmt, ast.Expr):
+class Expr(stmt):
     """
     An expression in statement context. The value of expression is discarded.
 
     :ivar value: (:class:`expr`) value
     """
-class For(keywordloc, stmt, ast.For):
+    _fields = ('value',)
+class For(stmt, keywordloc):
     """
     The ``for x in y:·  z·else:·  t`` statement.
 
@@ -502,30 +555,33 @@ class For(keywordloc, stmt, ast.For):
     :ivar else_loc: location of ``else``, if any
     :ivar else_colon_loc: location of colon after ``else``, if any
     """
+    _fields = ('target', 'iter', 'body', 'orelse')
     _locs = keywordloc._locs + ('in_loc', 'for_colon_loc', 'else_loc', 'else_colon_loc')
-class FunctionDef(keywordloc, stmt, ast.FunctionDef):
+class FunctionDef(stmt, keywordloc):
     """
     The ``def f(x):·  y`` statement.
 
     :ivar name: (string) name
     :ivar args: (:class:`arguments`) formal arguments
     :ivar body: (list of node) body
-    :ivar keyword_loc: location of ``def``
     :ivar decorator_list: (list of node) decorators
+    :ivar keyword_loc: location of ``def``
     :ivar name_loc: location of name
     :ivar colon_loc: location of ``:``, if any
     :ivar at_locs: locations of decorator ``@``
     """
+    _fields = ('name', 'args', 'body', 'decorator_list')
     _locs = keywordloc._locs + ('name_loc', 'colon_loc', 'at_locs')
-class Global(keywordloc, stmt, ast.Global):
+class Global(stmt, keywordloc):
     """
     The ``global x, y`` statement.
 
     :ivar names: (list of string) names
     :ivar name_locs: locations of names
     """
+    _fields = ('names',)
     _locs = keywordloc._locs + ('name_locs',)
-class If(keywordloc, stmt, ast.If):
+class If(stmt, keywordloc):
     """
     The ``if x:·  y·else:·  z`` or ``if x:·  y·elif: z·  t`` statement.
 
@@ -536,14 +592,16 @@ class If(keywordloc, stmt, ast.If):
     :ivar else_loc: location of ``else``, if any
     :ivar else_colon_loc: location of colon after ``else``, if any
     """
+    _fields = ('test', 'body', 'orelse')
     _locs = keywordloc._locs + ('if_colon_loc', 'else_loc', 'else_colon_loc')
-class Import(keywordloc, stmt, ast.Import):
+class Import(stmt, keywordloc):
     """
     The ``import x, y`` statement.
 
     :ivar names: (list of :class:`alias`) names
     """
-class ImportFrom(keywordloc, stmt, ast.ImportFrom):
+    _fields = ('names',)
+class ImportFrom(stmt, keywordloc):
     """
     The ``from ...x import y, z`` or ``from x import (y, z)`` or
     ``from x import *`` statement.
@@ -558,20 +616,24 @@ class ImportFrom(keywordloc, stmt, ast.ImportFrom):
     :ivar lparen_loc: location of ``(``, if any
     :ivar rparen_loc: location of ``)``, if any
     """
+    _fields = ('names', 'module', 'level')
     _locs = keywordloc._locs + ('dots_loc', 'module_loc', 'import_loc', 'lparen_loc', 'rparen_loc')
-class Pass(keywordloc, stmt, ast.Pass):
+class Pass(stmt, keywordloc):
     """The ``pass`` statement."""
-class Print(keywordloc, stmt, ast.Print):
+class Print(stmt, keywordloc):
     """
     The ``print >>x, y, z,`` statement.
+
+    **Emitted until 3.0 or ``print_function`` future flag.**
 
     :ivar dest: (node) destination stream, if any
     :ivar values: (list of node) values to print
     :ivar nl: (boolean) whether to print newline after values
     :ivar dest_loc: location of ``>>``
     """
+    _fields = ('dest', 'values', 'nl')
     _locs = keywordloc._locs + ('dest_loc',)
-class Raise(keywordloc, stmt, ast.Raise):
+class Raise(stmt, keywordloc):
     """
     The ``raise exn, arg, traceback`` statement.
 
@@ -579,11 +641,19 @@ class Raise(keywordloc, stmt, ast.Raise):
     :ivar inst: (node) exception instance or argument list, if any
     :ivar tback: (node) traceback, if any
     """
-class Return(keywordloc, stmt, ast.Return):
-    """The ``return x`` statement."""
-class TryExcept(keywordloc, stmt, ast.TryExcept):
+    _fields = ('type', 'inst', 'tback')
+class Return(stmt, keywordloc):
+    """
+    The ``return x`` statement.
+
+    :ivar value: (node) return value, if any
+    """
+    _fields = ('value',)
+class TryExcept(stmt, keywordloc):
     """
     The ``try:·  x·except y:·  z·else:·  t`` statement.
+
+    **Emitted until 3.0.**
 
     :ivar body: (list of node) code to try
     :ivar handlers: (list of :class:`ExceptHandler`) exception handlers
@@ -593,10 +663,13 @@ class TryExcept(keywordloc, stmt, ast.TryExcept):
     :ivar else_loc: location of ``else``
     :ivar else_colon_loc: location of ``:`` after ``else``
     """
+    _fields = ('body', 'handlers', 'orelse')
     _locs = keywordloc._locs + ('try_colon_loc', 'else_loc', 'else_colon_loc',)
-class TryFinally(keywordloc, stmt, ast.TryFinally):
+class TryFinally(stmt, keywordloc):
     """
     The ``try:·  x·finally:·  y`` statement.
+
+    **Emitted until 3.0.**
 
     :ivar body: (list of node) code to try
     :ivar finalbody: (list of node) code to finalize
@@ -605,8 +678,9 @@ class TryFinally(keywordloc, stmt, ast.TryFinally):
     :ivar finally_loc: location of ``finally``
     :ivar finally_colon_loc: location of ``:`` after ``finally``
     """
+    _fields = ('body', 'finalbody')
     _locs = keywordloc._locs + ('try_colon_loc', 'finally_loc', 'finally_colon_loc',)
-class While(keywordloc, stmt, ast.While):
+class While(stmt, keywordloc):
     """
     The ``while x:·  y·else:·  z`` statement.
 
@@ -618,8 +692,9 @@ class While(keywordloc, stmt, ast.While):
     :ivar else_loc: location of ``else``, if any
     :ivar else_colon_loc: location of colon after ``else``, if any
     """
+    _fields = ('test', 'body', 'orelse')
     _locs = keywordloc._locs + ('while_colon_loc', 'else_loc', 'else_colon_loc')
-class With(keywordloc, stmt, ast.With):
+class With(stmt, keywordloc):
     """
     The ``with x as y:·  z`` statement.
 
@@ -630,15 +705,16 @@ class With(keywordloc, stmt, ast.With):
     :ivar as_loc: location of ``as``, if any
     :ivar colon_loc: location of ``:``
     """
+    _fields = ('context_expr', 'optional_vars', 'body')
     _locs = keywordloc._locs + ('as_loc', 'colon_loc')
 
-class unaryop(commonloc):
+class unaryop(AST, commonloc):
     """Base class for unary numeric and boolean operators."""
-class Invert(unaryop, ast.Invert):
+class Invert(unaryop):
     """The ``~`` operator."""
-class Not(unaryop, ast.Not):
+class Not(unaryop):
     """The ``not`` operator."""
-class UAdd(unaryop, ast.UAdd):
+class UAdd(unaryop):
     """The unary ``+`` operator."""
-class USub(unaryop, ast.USub):
+class USub(unaryop):
     """The unary ``-`` operator."""

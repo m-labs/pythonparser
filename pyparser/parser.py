@@ -1140,7 +1140,7 @@ class Parser:
                         empty=lambda: ast.List(elts=[], ctx=None, loc=None)),
                BeginEnd('{', Opt(Rule('dictmaker')), '}',
                         empty=lambda: ast.Dict(keys=[], values=[], colon_locs=[],
-                                               ctx=None, loc=None)),
+                                               loc=None)),
                BeginEnd('`', atom_1, '`'),
                atom_2, atom_3, atom_5)
     """atom: ('(' [yield_expr|testlist_gexp] ')' |

@@ -336,8 +336,11 @@ def BeginEnd(begin_tok, inner_rule, end_tok, empty=None, loc=None):
         # Collection nodes don't have loc yet. If a node has loc at this
         # point, it means it's an expression passed in parentheses.
         if node.loc is None and type(node) in [
-                ast.List, ast.Dict, ast.Tuple, ast.Repr,
-                ast.ListComp, ast.GeneratorExp,
+                ast.List, ast.ListComp,
+                ast.Dict, ast.DictComp,
+                ast.Set, ast.SetComp,
+                ast.GeneratorExp,
+                ast.Tuple, ast.Repr,
                 ast.Call, ast.Subscript,
                 ast.arguments]:
             node.begin_loc, node.end_loc, node.loc = \
@@ -348,7 +351,9 @@ def BeginEnd(begin_tok, inner_rule, end_tok, empty=None, loc=None):
 class Parser:
 
     # Generic LL parsing methods
-    def __init__(self, lexer):
+    def __init__(self, lexer, version):
+        self._init_version(version)
+
         self.lexer     = lexer
         self._tokens   = []
         self._index    = -1
@@ -388,7 +393,15 @@ class Parser:
             return result
         return unmatched
 
-    # Helper methods
+    # Python-specific methods
+    def _init_version(self, version):
+        if version == (2, 6):
+            self.with_stmt = self.with_stmt__26
+            self.atom_6    = self.atom_6__26
+        elif version == (2, 7):
+            self.with_stmt = self.with_stmt__27
+            self.atom_6    = self.atom_6__27
+
     def _wrap_tuple(self, elts):
         assert len(elts) > 0
         if len(elts) > 1:
@@ -423,11 +436,11 @@ class Parser:
         return ast.Call(args=[], keywords=[], starargs=None, kwargs=None,
                         star_loc=None, dstar_loc=None, loc=None)
 
-    # Python-specific methods
     def add_flags(self, flags):
         if 'print_function' in flags:
             self.lexer.print_function = True
 
+    # Grammar
     @action(Expect(Alt(Newline(),
                        Rule('simple_stmt'),
                        SeqN(0, Rule('compound_stmt'), Newline()))))
@@ -953,17 +966,40 @@ class Parser:
         return stmt
 
     @action(Seq(Loc('with'), Rule('test'), Opt(Rule('with_var')), Loc(':'), Rule('suite')))
-    def with_stmt(self, with_loc, context, with_var, colon_loc, body):
-        """with_stmt: 'with' test [ with_var ] ':' suite"""
-        as_loc = optional_vars = None
+    def with_stmt__26(self, with_loc, context, with_var, colon_loc, body):
+        """(2.6) with_stmt: 'with' test [ with_var ] ':' suite"""
         if with_var:
             as_loc, optional_vars = with_var
-        return ast.With(context_expr=context, optional_vars=optional_vars, body=body,
-                        keyword_loc=with_loc, as_loc=as_loc, colon_loc=colon_loc,
+            item = ast.withitem(context_expr=context, optional_vars=optional_vars,
+                                as_loc=as_loc, loc=context.loc.join(optional_vars.loc))
+        else:
+            item = ast.withitem(context_expr=context, optional_vars=None,
+                                as_loc=None, loc=context.loc)
+        return ast.With(items=[item], body=body,
+                        keyword_loc=with_loc, colon_loc=colon_loc,
                         loc=with_loc.join(body[-1].loc))
 
     with_var = Seq(Loc('as'), Rule('expr'))
-    """with_var: 'as' expr"""
+    """(2.6) with_var: 'as' expr"""
+
+    @action(Seq(Loc('with'), List(Rule('with_item'), ',', trailing=False), Loc(':'),
+                Rule('suite')))
+    def with_stmt__27(self, with_loc, items, colon_loc, body):
+        """(2.7) with_stmt: 'with' with_item (',' with_item)*  ':' suite"""
+        return ast.With(items=items, body=body,
+                        keyword_loc=with_loc, colon_loc=colon_loc,
+                        loc=with_loc.join(body[-1].loc))
+
+    @action(Seq(Rule('test'), Opt(Seq(Loc('as'), Rule('expr')))))
+    def with_item(self, context, as_opt):
+        """(2.7) with_item: test ['as' expr]"""
+        if as_opt:
+            as_loc, optional_vars = as_opt
+            return ast.withitem(context_expr=context, optional_vars=optional_vars,
+                                as_loc=as_loc, loc=context.loc.join(optional_vars.loc))
+        else:
+            return ast.withitem(context_expr=context, optional_vars=None,
+                                as_loc=None, loc=context.loc)
 
     @action(Seq(Loc('except'),
                 Opt(Seq(Rule('test'),
@@ -1134,20 +1170,30 @@ class Parser:
                        begin_loc=strings[0].begin_loc, end_loc=strings[-1].end_loc,
                        loc=strings[0].loc.join(strings[-1].loc))
 
-    atom = Alt(BeginEnd('(', Opt(Alt(Rule('yield_expr'), Rule('testlist_gexp'))), ')',
+    atom_6__26 = Rule('dictmaker')
+    atom_6__27 = Rule('dictorsetmaker')
+
+    atom = Alt(BeginEnd('(', Opt(Alt(Rule('yield_expr'), Rule('testlist_comp'))), ')',
                         empty=lambda: ast.Tuple(elts=[], ctx=None, loc=None)),
                BeginEnd('[', Opt(Rule('listmaker')), ']',
                         empty=lambda: ast.List(elts=[], ctx=None, loc=None)),
-               BeginEnd('{', Opt(Rule('dictmaker')), '}',
+               BeginEnd('{', Opt(Rule('atom_6')), '}',
                         empty=lambda: ast.Dict(keys=[], values=[], colon_locs=[],
                                                loc=None)),
                BeginEnd('`', atom_1, '`'),
                atom_2, atom_3, atom_5)
-    """atom: ('(' [yield_expr|testlist_gexp] ')' |
-              '[' [listmaker] ']' |
-              '{' [dictmaker] '}' |
-              '`' testlist1 '`' |
-              NAME | NUMBER | STRING+)"""
+    """
+    (2.6) atom: ('(' [yield_expr|testlist_gexp] ')' |
+                 '[' [listmaker] ']' |
+                 '{' [dictmaker] '}' |
+                 '`' testlist1 '`' |
+                 NAME | NUMBER | STRING+)
+    (2.7) atom: ('(' [yield_expr|testlist_comp] ')' |
+                 '[' [listmaker] ']' |
+                 '{' [dictorsetmaker] '}' |
+                 '`' testlist1 '`' |
+                 NAME | NUMBER | STRING+)
+    """
 
     def list_gen_action(self, lhs, rhs):
         if rhs is None: # (x)
@@ -1173,21 +1219,24 @@ class Parser:
         (list_gen_action)
     """listmaker: test ( list_for | (',' test)* [','] )"""
 
-    @action(Rule('gen_for'))
-    def testlist_gexp_1(self, compose):
+    @action(Rule('comp_for'))
+    def testlist_comp_1(self, compose):
         return ast.GeneratorExp(generators=compose([]), loc=None)
 
     @action(List(Rule('test'), ',', trailing=True, leading=False))
-    def testlist_gexp_2(self, elts):
+    def testlist_comp_2(self, elts):
         if elts == [] and not elts.trailing_comma:
             return None
         else:
             return ast.Tuple(elts=elts, ctx=None, loc=None)
 
-    testlist_gexp = action(
-        Seq(Rule('test'), Alt(testlist_gexp_1, testlist_gexp_2))) \
+    testlist_comp = action(
+        Seq(Rule('test'), Alt(testlist_comp_1, testlist_comp_2))) \
         (list_gen_action)
-    """testlist_gexp: test ( gen_for | (',' test)* [','] )"""
+    """
+    (2.6) testlist_gexp: test ( gen_for | (',' test)* [','] )
+    (2.7) testlist_comp: test ( comp_for | (',' test)* [','] )
+    """
 
     @action(Seq(Loc('lambda'), Opt(Rule('varargslist')), Loc(':'), Rule('test')))
     def lambdef(self, lambda_loc, args_opt, colon_loc, body):
@@ -1274,11 +1323,45 @@ class Parser:
 
     @action(List(Seq(Rule('test'), Loc(':'), Rule('test')), ',', trailing=True))
     def dictmaker(self, elts):
-        """dictmaker: test ':' test (',' test ':' test)* [',']"""
+        """(2.6) dictmaker: test ':' test (',' test ':' test)* [',']"""
         return ast.Dict(keys=list(map(lambda x: x[0], elts)),
                         values=list(map(lambda x: x[2], elts)),
                         colon_locs=list(map(lambda x: x[1], elts)),
                         loc=None)
+
+    dictorsetmaker_1 = Seq(Rule('test'), Loc(':'), Rule('test'))
+
+    @action(Seq(dictorsetmaker_1,
+                Alt(Rule('comp_for'),
+                    List(dictorsetmaker_1, ',', leading=False, trailing=True))))
+    def dictorsetmaker_2(self, first, elts):
+        if isinstance(elts, commalist):
+            elts.insert(0, first)
+            return ast.Dict(keys=list(map(lambda x: x[0], elts)),
+                            values=list(map(lambda x: x[2], elts)),
+                            colon_locs=list(map(lambda x: x[1], elts)),
+                            loc=None)
+        else:
+            return ast.DictComp(key=first[0], value=first[2], generators=elts([]),
+                                colon_loc=first[1],
+                                begin_loc=None, end_loc=None, loc=None)
+
+    @action(Seq(Rule('test'),
+                Alt(Rule('comp_for'),
+                    List(Rule('test'), ',', leading=False, trailing=True))))
+    def dictorsetmaker_3(self, first, elts):
+        if isinstance(elts, commalist):
+            elts.insert(0, first)
+            return ast.Set(elts=elts, loc=None)
+        else:
+            return ast.SetComp(elt=first, generators=elts([]),
+                               begin_loc=None, end_loc=None, loc=None)
+
+    dictorsetmaker = Alt(dictorsetmaker_2, dictorsetmaker_3)
+    """
+    (2.7) dictorsetmaker: ( (test ':' test (comp_for | (',' test ':' test)* [','])) |
+                            (test (comp_for | (',' test)* [','])) )
+    """
 
     @action(Seq(Loc('class'), Tok('ident'),
                 Opt(Seq(Loc('('), List(Rule('test'), ',', trailing=True), Loc(')'))),
@@ -1366,7 +1449,7 @@ class Parser:
                                arg_loc=lhs.loc, equals_loc=equals_loc)
         return thunk
 
-    @action(Opt(Rule('gen_for')))
+    @action(Opt(Rule('comp_for')))
     def argument_2(self, compose_opt):
         def thunk(lhs):
             if compose_opt:
@@ -1380,13 +1463,16 @@ class Parser:
     @action(Seq(Rule('test'), Alt(argument_1, argument_2)))
     def argument(self, lhs, thunk):
         # This rule is reformulated to avoid exponential backtracking.
-        """argument: test [gen_for] | test '=' test  # Really [keyword '='] test"""
+        """
+        (2.6) argument: test [gen_for] | test '=' test  # Really [keyword '='] test
+        (2.7) argument: test [comp_for] | test '=' test
+        """
         return thunk(lhs)
 
     list_iter = Alt(Rule("list_for"), Rule("list_if"))
     """list_iter: list_for | list_if"""
 
-    def list_gen_for_action(self, for_loc, target, in_loc, iter, next_opt):
+    def list_comp_for_action(self, for_loc, target, in_loc, iter, next_opt):
         def compose(comprehensions):
             comp = ast.comprehension(
                 target=target, iter=iter, ifs=[],
@@ -1398,7 +1484,7 @@ class Parser:
                 return comprehensions
         return compose
 
-    def list_gen_if_action(self, if_loc, cond, next_opt):
+    def list_comp_if_action(self, if_loc, cond, next_opt):
         def compose(comprehensions):
             comprehensions[-1].ifs.append(cond)
             comprehensions[-1].if_locs.append(if_loc)
@@ -1412,27 +1498,36 @@ class Parser:
     list_for = action(
         Seq(Loc('for'), Rule('exprlist'),
             Loc('in'), Rule('testlist_safe'), Opt(Rule('list_iter')))) \
-        (list_gen_for_action)
+        (list_comp_for_action)
     """list_for: 'for' exprlist 'in' testlist_safe [list_iter]"""
 
     list_if = action(
         Seq(Loc('if'), Rule('old_test'), Opt(Rule('list_iter')))) \
-        (list_gen_if_action)
+        (list_comp_if_action)
     """list_if: 'if' old_test [list_iter]"""
 
-    gen_iter = Alt(Rule("gen_for"), Rule("gen_if"))
-    """gen_iter: gen_for | gen_if"""
+    comp_iter = Alt(Rule("comp_for"), Rule("comp_if"))
+    """
+    (2.6) gen_iter: gen_for | gen_if
+    (2.7) comp_iter: comp_for | comp_if
+    """
 
-    gen_for = action(
+    comp_for = action(
         Seq(Loc('for'), Rule('exprlist'),
-            Loc('in'), Rule('or_test'), Opt(Rule('gen_iter')))) \
-        (list_gen_for_action)
-    """gen_for: 'for' exprlist 'in' or_test [gen_iter]"""
+            Loc('in'), Rule('or_test'), Opt(Rule('comp_iter')))) \
+        (list_comp_for_action)
+    """
+    (2.6) gen_for: 'for' exprlist 'in' or_test [gen_iter]
+    (2.7) comp_for: 'for' exprlist 'in' or_test [comp_iter]
+    """
 
-    gen_if = action(
-        Seq(Loc('if'), Rule('old_test'), Opt(Rule('gen_iter')))) \
-        (list_gen_if_action)
-    """gen_if: 'if' old_test [gen_iter]"""
+    comp_if = action(
+        Seq(Loc('if'), Rule('old_test'), Opt(Rule('comp_iter')))) \
+        (list_comp_if_action)
+    """
+    (2.6) gen_if: 'if' old_test [gen_iter]
+    (2.7) comp_if: 'if' old_test [comp_iter]
+    """
 
     testlist1 = action(List(Rule('test'), ',', trailing=False))(_wrap_tuple)
     """testlist1: test (',' test)*"""

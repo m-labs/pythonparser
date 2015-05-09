@@ -15,7 +15,9 @@ class ParserTestCase(unittest.TestCase):
 
     maxDiff = None
 
-    def parser_for(self, code, version=(2, 6), interactive=False):
+    versions = [(2, 6), (2, 7)]
+
+    def parser_for(self, code, version, interactive=False):
         code = code.replace("·", "\n")
 
         self.source_buffer = source.Buffer(code)
@@ -28,7 +30,7 @@ class ParserTestCase(unittest.TestCase):
             return token
         self.lexer.next = lexer_next
 
-        self.parser = parser.Parser(self.lexer)
+        self.parser = parser.Parser(self.lexer, version)
         return self.parser
 
     def flatten_ast(self, node):
@@ -112,55 +114,61 @@ class ParserTestCase(unittest.TestCase):
 
             matcher_pos = matcher_match.end(0)
 
-    def _assertParsesGen(self, expected_flat_ast, code,
-                         loc_matcher="", ast_slicer=lambda x: (0, x),
-                         validate_if=lambda: True):
-        ast = self.parser_for(code + "\n").file_input()
-        flat_ast = self.flatten_ast(ast)
-        python_ast = pyast.parse(code.replace("·", "\n") + "\n")
-        flat_python_ast = self.flatten_python_ast(python_ast)
-        self.assertEqual({'ty': 'Module', 'body': expected_flat_ast},
-                         flat_ast)
-        if validate_if():
+    def assertParsesGen(self, expected_flat_ast, code,
+                        loc_matcher="", ast_slicer=lambda x: (0, x),
+                        only_if=lambda ver: True, validate_if=lambda: True):
+        for version in self.versions:
+            if not only_if(version):
+                continue
+
+            ast = self.parser_for(code + "\n", version).file_input()
+            flat_ast = self.flatten_ast(ast)
+            python_ast = pyast.parse(code.replace("·", "\n") + "\n")
+            flat_python_ast = self.flatten_python_ast(python_ast)
             self.assertEqual({'ty': 'Module', 'body': expected_flat_ast},
-                             flat_python_ast)
-        self.match_loc(ast, loc_matcher, ast_slicer)
+                             flat_ast)
+            if validate_if():
+                self.assertEqual({'ty': 'Module', 'body': expected_flat_ast},
+                                 flat_python_ast)
+            self.match_loc(ast, loc_matcher, ast_slicer)
 
     def assertParsesSuite(self, expected_flat_ast, code, loc_matcher="", **kwargs):
-        self._assertParsesGen(expected_flat_ast, code,
-                              loc_matcher, lambda x: (0, x.body),
-                              **kwargs)
+        self.assertParsesGen(expected_flat_ast, code,
+                             loc_matcher, lambda x: (0, x.body),
+                             **kwargs)
 
     def assertParsesExpr(self, expected_flat_ast, code, loc_matcher="", **kwargs):
-        self._assertParsesGen([{'ty': 'Expr', 'value': expected_flat_ast}], code,
-                              loc_matcher, lambda x: (0, x.body[0].value),
-                              **kwargs)
+        self.assertParsesGen([{'ty': 'Expr', 'value': expected_flat_ast}], code,
+                             loc_matcher, lambda x: (0, x.body[0].value),
+                             **kwargs)
 
     def assertParsesArgs(self, expected_flat_ast, code, loc_matcher="", **kwargs):
-        self._assertParsesGen([{'ty': 'Expr', 'value': {'ty': 'Lambda', 'body': self.ast_1,
-                                    'args': expected_flat_ast}}],
-                              "lambda %s: 1" % code,
-                              loc_matcher, lambda x: (7, x.body[0].value.args),
-                              **kwargs)
+        self.assertParsesGen([{'ty': 'Expr', 'value': {'ty': 'Lambda', 'body': self.ast_1,
+                                                       'args': expected_flat_ast}}],
+                             "lambda %s: 1" % code,
+                             loc_matcher, lambda x: (7, x.body[0].value.args),
+                             **kwargs)
 
     def assertParsesToplevel(self, expected_flat_ast, code,
                              mode="file_input", interactive=False):
-        ast = getattr(self.parser_for(code, interactive=interactive), mode)()
-        self.assertEqual(expected_flat_ast, self.flatten_ast(ast))
+        for version in self.versions:
+            ast = getattr(self.parser_for(code, version=version, interactive=interactive), mode)()
+            self.assertEqual(expected_flat_ast, self.flatten_ast(ast))
 
     def assertDiagnoses(self, code, level, reason, args={}, loc_matcher=""):
-        try:
-            self.parser_for(code).file_input()
-            self.fail("Expected a diagnostic")
-        except diagnostic.DiagnosticException as e:
-            self.assertEqual(level, e.diagnostic.level)
-            self.assertEqual(reason, e.diagnostic.reason)
-            for key in args:
-                self.assertEqual(args[key], e.diagnostic.arguments[key],
-                                 "{{%s}}: \"%s\" != \"%s\"" %
-                                    (key, args[key], e.diagnostic.arguments[key]))
-            self.match_loc([e.diagnostic.location] + e.diagnostic.highlights,
-                           loc_matcher)
+        for version in self.versions:
+            try:
+                self.parser_for(code, version).file_input()
+                self.fail("Expected a diagnostic")
+            except diagnostic.DiagnosticException as e:
+                self.assertEqual(level, e.diagnostic.level)
+                self.assertEqual(reason, e.diagnostic.reason)
+                for key in args:
+                    self.assertEqual(args[key], e.diagnostic.arguments[key],
+                                     "{{%s}}: \"%s\" != \"%s\"" %
+                                        (key, args[key], e.diagnostic.arguments[key]))
+                self.match_loc([e.diagnostic.location] + e.diagnostic.highlights,
+                               loc_matcher)
 
     def assertDiagnosesUnexpected(self, code, err_token, loc_matcher=""):
         self.assertDiagnoses(code,
@@ -497,6 +505,44 @@ class ParserTestCase(unittest.TestCase):
             "     ^ end_loc"
             "  ^ colon_locs.0"
             "~~~~~~ loc")
+
+    def test_dict_comp(self):
+        self.assertParsesExpr(
+            {'ty': 'DictComp', 'key': self.ast_x, 'value': self.ast_y,
+             'generators': [{'ty': 'comprehension', 'target': self.ast_z,
+                             'iter': self.ast_t, 'ifs': []}]},
+            "{x: y for z in t}",
+            "^ begin_loc"
+            "                ^ end_loc"
+            "  ^ colon_loc"
+            "~~~~~~~~~~~~~~~~~ loc",
+            only_if=lambda ver: ver >= (2, 7))
+
+    def test_set(self):
+        self.assertParsesExpr(
+            {'ty': 'Set', 'elts': [self.ast_1]},
+            "{1}",
+            "^ begin_loc"
+            "  ^ end_loc"
+            "~~~ loc",
+            only_if=lambda ver: ver >= (2, 7))
+
+        self.assertParsesExpr(
+            {'ty': 'Set', 'elts': [self.ast_1, self.ast_2]},
+            "{1, 2}",
+            "~~~~~~ loc",
+            only_if=lambda ver: ver >= (2, 7))
+
+    def test_set_comp(self):
+        self.assertParsesExpr(
+            {'ty': 'SetComp', 'elt': self.ast_x,
+             'generators': [{'ty': 'comprehension', 'target': self.ast_y,
+                             'iter': self.ast_z, 'ifs': []}]},
+            "{x for y in z}",
+            "^ begin_loc"
+            "             ^ end_loc"
+            "~~~~~~~~~~~~~~ loc",
+            only_if=lambda ver: ver >= (2, 7))
 
     def test_repr(self):
         self.assertParsesExpr(
@@ -1300,19 +1346,38 @@ class ParserTestCase(unittest.TestCase):
 
     def test_with(self):
         self.assertParsesSuite(
-            [{'ty': 'With', 'context_expr': self.ast_x, 'optional_vars': None,
-              'body': [self.ast_expr_1]}],
+            [{'ty': 'With', 'body': [self.ast_expr_1],
+              'items': [{'ty': 'withitem', 'context_expr': self.ast_x, 'optional_vars': None}]}],
             "with x:·  1",
             "~~~~ 0.keyword_loc"
+            "     ~ 0.items.0.loc"
             "      ^ 0.colon_loc"
-            "~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 0))
 
         self.assertParsesSuite(
-            [{'ty': 'With', 'context_expr': self.ast_x, 'optional_vars': self.ast_y,
-              'body': [self.ast_expr_1]}],
+            [{'ty': 'With', 'body': [self.ast_expr_1],
+              'items': [{'ty': 'withitem', 'context_expr': self.ast_x,
+                         'optional_vars': self.ast_y}]}],
             "with x as y:·  1",
-            "       ~~ 0.as_loc"
-            "~~~~~~~~~~~~~~~~ 0.loc")
+            "       ~~ 0.items.0.as_loc"
+            "     ~~~~~~ 0.items.0.loc"
+            "~~~~~~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 0))
+
+        self.assertParsesSuite(
+            [{'ty': 'With', 'body': [self.ast_expr_1],
+              'items': [{'ty': 'withitem', 'context_expr': self.ast_x,
+                         'optional_vars': self.ast_y},
+                        {'ty': 'withitem', 'context_expr': self.ast_t,
+                         'optional_vars': None}]}],
+            "with x as y, t:·  1",
+            "       ~~ 0.items.0.as_loc"
+            "     ~~~~~~ 0.items.0.loc"
+            "             ~ 0.items.1.loc"
+            "~~~~~~~~~~~~~~~~~~~ 0.loc",
+            only_if=lambda ver: ver >= (2, 7),
+            validate_if=lambda: sys.version_info >= (3, 0))
 
     def test_class(self):
         self.assertParsesSuite(

@@ -31,7 +31,7 @@ def parse(source, filename='<unknown>', mode='exec',
     if mode in ('single', 'eval'):
         lexer.interactive = True
 
-    parser = pyparser.parser.Parser(lexer)
+    parser = pyparser.parser.Parser(lexer, version)
     parser.add_flags(flags)
 
     if mode == 'exec':

@@ -11,6 +11,11 @@ The attribute ``loc``, present in every class except those inheriting :class:`bo
 has a special meaning: it encompasses the entire AST node, so that it is possible
 to cut the range contained inside ``loc`` of a parsetree fragment and paste it
 somewhere else without altering said parsetree fragment that.
+
+The AST format for all supported versions is generally normalized to match the native
+:mod:`..ast` module of the latest supported Python version. In particular this affects:
+
+    * :class:`With`: on 2.6-2.7 it uses the 3.0 format.
 """
 
 from __future__ import absolute_import, division, print_function, unicode_literals
@@ -246,8 +251,10 @@ class DictComp(expr, beginendloc):
     :ivar key: (node) key part of comprehension body
     :ivar value: (node) value part of comprehension body
     :ivar generators: (list of :class:`comprehension`) ``for`` clauses
+    :ivar colon_loc: location of ``:``
     """
     _fields = ('key', 'value', 'generators')
+    _locs = beginendloc._locs + ('colon_loc',)
 class GeneratorExp(expr, beginendloc):
     """
     A generator expression, e.g. ``(x for x in y)``.
@@ -698,15 +705,13 @@ class With(stmt, keywordloc):
     """
     The ``with x as y:·  z`` statement.
 
-    :ivar context_expr: (node) context
-    :ivar optional_vars: (assignable node) context binding
+    :ivar items: (list of :class:`withitem`) bindings
     :ivar body: (node) body
     :ivar keyword_loc: location of ``with``
-    :ivar as_loc: location of ``as``, if any
     :ivar colon_loc: location of ``:``
     """
-    _fields = ('context_expr', 'optional_vars', 'body')
-    _locs = keywordloc._locs + ('as_loc', 'colon_loc')
+    _fields = ('items', 'body')
+    _locs = keywordloc._locs + ('colon_loc',)
 
 class unaryop(AST, commonloc):
     """Base class for unary numeric and boolean operators."""
@@ -718,3 +723,14 @@ class UAdd(unaryop):
     """The unary ``+`` operator."""
 class USub(unaryop):
     """The unary ``-`` operator."""
+
+class withitem(AST, commonloc):
+    """
+    The ``x as y`` clause in ``with x as y:``.
+
+    :ivar context_expr: (node) context
+    :ivar optional_vars: (assignable node) context binding, if any
+    :ivar as_loc: location of ``as``, if any
+    """
+    _fields = ('context_expr', 'optional_vars')
+    _locs = commonloc._locs + ('as_loc',)

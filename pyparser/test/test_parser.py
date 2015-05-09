@@ -15,12 +15,12 @@ class ParserTestCase(unittest.TestCase):
 
     maxDiff = None
 
-    versions = [(2, 6), (2, 7)]
+    versions = [(2, 6), (2, 7), (3, 0), (3, 1)]
 
     def parser_for(self, code, version, interactive=False):
         code = code.replace("·", "\n")
 
-        self.source_buffer = source.Buffer(code)
+        self.source_buffer = source.Buffer(code, str(version))
         self.lexer = lexer.Lexer(self.source_buffer, version, interactive=interactive)
 
         old_next = self.lexer.next
@@ -123,14 +123,15 @@ class ParserTestCase(unittest.TestCase):
 
             ast = self.parser_for(code + "\n", version).file_input()
             flat_ast = self.flatten_ast(ast)
-            python_ast = pyast.parse(code.replace("·", "\n") + "\n")
-            flat_python_ast = self.flatten_python_ast(python_ast)
             self.assertEqual({'ty': 'Module', 'body': expected_flat_ast},
                              flat_ast)
-            if validate_if():
+            self.match_loc(ast, loc_matcher, ast_slicer)
+
+            if version == sys.version_info[0:2] and validate_if():
+                python_ast = pyast.parse(code.replace("·", "\n") + "\n")
+                flat_python_ast = self.flatten_python_ast(python_ast)
                 self.assertEqual({'ty': 'Module', 'body': expected_flat_ast},
                                  flat_python_ast)
-            self.match_loc(ast, loc_matcher, ast_slicer)
 
     def assertParsesSuite(self, expected_flat_ast, code, loc_matcher="", **kwargs):
         self.assertParsesGen(expected_flat_ast, code,
@@ -155,8 +156,12 @@ class ParserTestCase(unittest.TestCase):
             ast = getattr(self.parser_for(code, version=version, interactive=interactive), mode)()
             self.assertEqual(expected_flat_ast, self.flatten_ast(ast))
 
-    def assertDiagnoses(self, code, level, reason, args={}, loc_matcher=""):
+    def assertDiagnoses(self, code, level, reason, args={}, loc_matcher="",
+                        only_if=lambda ver: True):
         for version in self.versions:
+            if not only_if(version):
+                continue
+
             try:
                 self.parser_for(code, version).file_input()
                 self.fail("Expected a diagnostic")
@@ -170,7 +175,8 @@ class ParserTestCase(unittest.TestCase):
                 self.match_loc([e.diagnostic.location] + e.diagnostic.highlights,
                                loc_matcher)
 
-    def assertDiagnosesUnexpected(self, code, err_token, loc_matcher=""):
+    def assertDiagnosesUnexpected(self, code, err_token, loc_matcher="",
+                                  only_if=lambda ver: True):
         self.assertDiagnoses(code,
             "fatal", "unexpected {actual}: expected {expected}",
             {'actual': err_token}, loc_matcher="")
@@ -189,6 +195,11 @@ class ParserTestCase(unittest.TestCase):
     ast_y = {'ty': 'Name', 'id': 'y', 'ctx': None}
     ast_z = {'ty': 'Name', 'id': 'z', 'ctx': None}
     ast_t = {'ty': 'Name', 'id': 't', 'ctx': None}
+
+    ast_arg_x = {'ty': 'arg', 'arg': 'x', 'annotation': None}
+    ast_arg_y = {'ty': 'arg', 'arg': 'y', 'annotation': None}
+    ast_arg_z = {'ty': 'arg', 'arg': 'z', 'annotation': None}
+    ast_arg_t = {'ty': 'arg', 'arg': 't', 'annotation': None}
 
     #
     # LITERALS
@@ -232,6 +243,25 @@ class ParserTestCase(unittest.TestCase):
             {'ty': 'Name', 'id': 'foo', 'ctx': None},
             "foo",
             "~~~ loc")
+
+    def test_named(self):
+        self.assertParsesExpr(
+            {'ty': 'NameConstant', 'value': None},
+            "None",
+            "~~~~ loc",
+            only_if=lambda ver: ver >= (3, 0))
+
+        self.assertParsesExpr(
+            {'ty': 'NameConstant', 'value': True},
+            "True",
+            "~~~~ loc",
+            only_if=lambda ver: ver >= (3, 0))
+
+        self.assertParsesExpr(
+            {'ty': 'NameConstant', 'value': False},
+            "False",
+            "~~~~~ loc",
+            only_if=lambda ver: ver >= (3, 0))
 
     #
     # OPERATORS
@@ -378,7 +408,8 @@ class ParserTestCase(unittest.TestCase):
              'left': self.ast_1, 'comparators': [self.ast_1]},
             "1 <> 1",
             "~~~~~~ loc"
-            "  ~~ ops.0.loc")
+            "  ~~ ops.0.loc",
+            only_if=lambda ver: ver < (3, 0))
 
         self.assertParsesExpr(
             {'ty': 'Compare', 'ops': [{'ty': 'In'}],
@@ -550,7 +581,8 @@ class ParserTestCase(unittest.TestCase):
             "`1`",
             "^ begin_loc"
             "  ^ end_loc"
-            "~~~ loc")
+            "~~~ loc",
+            only_if=lambda ver: ver < (3, 0))
 
     #
     # GENERATOR AND CONDITIONAL EXPRESSIONS
@@ -639,29 +671,46 @@ class ParserTestCase(unittest.TestCase):
         self.assertParsesExpr(
             {'ty': 'Lambda',
              'args': {'ty': 'arguments', 'args': [], 'defaults': [],
+                      'kwonlyargs': [], 'kw_defaults': [],
                       'kwarg': None, 'vararg': None},
              'body': self.ast_x},
             "lambda: x",
             "~~~~~~ lambda_loc"
             "      < args.loc"
             "      ^ colon_loc"
-            "~~~~~~~~~ loc")
+            "~~~~~~~~~ loc",
+            validate_if=lambda: sys.version_info >= (3, 2))
 
-    def test_old_lambda(self):
+    def test_lambda_nocond(self):
         self.assertParsesExpr(
-            {'ty': 'ListComp', 'elt': self.ast_x, 'generators': [
+            {'ty': 'GeneratorExp', 'elt': self.ast_x, 'generators': [
                 {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y,
                  'ifs': [{'ty': 'Lambda',
                      'args': {'ty': 'arguments', 'args': [], 'defaults': [],
+                              'kwonlyargs': [], 'kw_defaults': [],
                               'kwarg': None, 'vararg': None},
                      'body': self.ast_t}
                 ]}
             ]},
-            "[x for y in z if lambda: t]",
+            "(x for y in z if lambda: t)",
             "                 ~~~~~~ generators.0.ifs.0.lambda_loc"
             "                       < generators.0.ifs.0.args.loc"
             "                       ^ generators.0.ifs.0.colon_loc"
-            "                 ~~~~~~~~~ generators.0.ifs.0.loc")
+            "                 ~~~~~~~~~ generators.0.ifs.0.loc",
+            validate_if=lambda: sys.version_info >= (3, 2))
+
+        self.assertParsesExpr(
+            {'ty': 'GeneratorExp', 'elt': self.ast_x, 'generators': [
+                {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y,
+                 'ifs': [{'ty': 'Lambda',
+                     'args': {'ty': 'arguments', 'args': [self.ast_arg_t], 'defaults': [],
+                              'kwonlyargs': [], 'kw_defaults': [],
+                              'kwarg': None, 'vararg': None},
+                     'body': self.ast_t}
+                ]}
+            ]},
+            "(x for y in z if lambda t: t)",
+            validate_if=lambda: sys.version_info >= (3, 2))
 
     #
     # CALLS, ATTRIBUTES AND SUBSCRIPTS
@@ -704,7 +753,14 @@ class ParserTestCase(unittest.TestCase):
              'args': [], 'keywords': []},
             "x(*y)",
             "  ^ star_loc"
-            "~~~~~ loc")
+            "~~~~~ loc",
+            # This and following tests fail because of a grammar bug (conflict)
+            # in upstream Python. We get different results because our parsers
+            # are different, and upstream works more or less by accident.
+            # Upstream "fixed" it with a gross workaround in a minor version
+            # (at least 3.1.5).
+            # Not really worth fixing for us, so skip.
+            only_if=lambda ver: ver not in ((3, 0), (3, 1)))
 
         self.assertParsesExpr(
             {'ty': 'Call', 'func': self.ast_x, 'starargs': self.ast_y, 'kwargs': self.ast_z,
@@ -712,7 +768,8 @@ class ParserTestCase(unittest.TestCase):
             "x(*y, **z)",
             "  ^ star_loc"
             "      ^^ dstar_loc"
-            "~~~~~~~~~~ loc")
+            "~~~~~~~~~~ loc",
+            only_if=lambda ver: ver not in ((3, 0), (3, 1)))
 
         self.assertParsesExpr(
             {'ty': 'Call', 'func': self.ast_x, 'starargs': self.ast_y, 'kwargs': self.ast_z,
@@ -720,7 +777,8 @@ class ParserTestCase(unittest.TestCase):
             "x(*y, t=t, **z)",
             "  ^ star_loc"
             "           ^^ dstar_loc"
-            "~~~~~~~~~~~~~~~ loc")
+            "~~~~~~~~~~~~~~~ loc",
+            only_if=lambda ver: ver not in ((3, 0), (3, 1)))
 
         self.assertParsesExpr(
             {'ty': 'Call', 'func': self.ast_x, 'starargs': self.ast_z, 'kwargs': self.ast_t,
@@ -728,7 +786,8 @@ class ParserTestCase(unittest.TestCase):
             "x(y, *z, **t)",
             "     ^ star_loc"
             "         ^^ dstar_loc"
-            "~~~~~~~~~~~~~ loc")
+            "~~~~~~~~~~~~~ loc",
+            only_if=lambda ver: ver not in ((3, 0), (3, 1)))
 
         self.assertParsesExpr(
             {'ty': 'Call', 'func': self.ast_x, 'starargs': None, 'kwargs': self.ast_z,
@@ -808,7 +867,7 @@ class ParserTestCase(unittest.TestCase):
             "  ~~~~ slice.loc"
             "~~~~~~~ loc",
             # A Python bug places ast.Name(id='None') instead of None in step on <3.0
-            validate_if=lambda: sys.version_info[0] > 2)
+            validate_if=lambda: sys.version_info >= (3, 0))
 
         self.assertParsesExpr(
             {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
@@ -824,7 +883,16 @@ class ParserTestCase(unittest.TestCase):
              'slice': {'ty': 'Ellipsis'}},
             "x[...]",
             "  ~~~ slice.loc"
-            "~~~~~~ loc")
+            "~~~~~~ loc",
+            only_if=lambda ver: ver < (3, 0))
+
+        self.assertParsesExpr(
+            {'ty': 'Subscript', 'value': self.ast_x, 'ctx': None,
+             'slice': {'ty': 'Index', 'value': {'ty': 'Ellipsis'}}},
+            "x[...]",
+            "  ~~~ slice.loc"
+            "~~~~~~ loc",
+            only_if=lambda ver: ver >= (3, 0))
 
     def test_attribute(self):
         self.assertParsesExpr(
@@ -865,6 +933,16 @@ class ParserTestCase(unittest.TestCase):
             "x = 1, 2",
             "    ~~~~ 0.value.loc"
             "~~~~~~~~ 0.loc")
+
+    def test_assign_starred(self):
+        self.assertParsesSuite(
+            [{'ty': 'Assign', 'targets': [{'ty': 'Starred', 'value': self.ast_x}],
+              'value': self.ast_y}],
+            "*x = y",
+            "^ 0.targets.0.star_loc"
+            "~~ 0.targets.0.loc"
+            "~~~~~~ 0.loc",
+            only_if=lambda ver: ver >= (3, 0))
 
     def test_augassign(self):
         self.assertParsesSuite(
@@ -950,27 +1028,31 @@ class ParserTestCase(unittest.TestCase):
             [{'ty': 'Print', 'dest': None, 'values': [self.ast_1], 'nl': True}],
             "print 1",
             "~~~~~ 0.keyword_loc"
-            "~~~~~~~ 0.loc")
+            "~~~~~~~ 0.loc",
+            only_if=lambda ver: ver < (3, 0))
 
         self.assertParsesSuite(
             [{'ty': 'Print', 'dest': None, 'values': [self.ast_1], 'nl': False}],
             "print 1,",
             "~~~~~ 0.keyword_loc"
-            "~~~~~~~~ 0.loc")
+            "~~~~~~~~ 0.loc",
+            only_if=lambda ver: ver < (3, 0))
 
         self.assertParsesSuite(
             [{'ty': 'Print', 'dest': self.ast_2, 'values': [self.ast_1], 'nl': True}],
             "print >>2, 1",
             "~~~~~ 0.keyword_loc"
             "      ~~ 0.dest_loc"
-            "~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~ 0.loc",
+            only_if=lambda ver: ver < (3, 0))
 
         self.assertParsesSuite(
             [{'ty': 'Print', 'dest': self.ast_2, 'values': [self.ast_1], 'nl': False}],
             "print >>2, 1,",
             "~~~~~ 0.keyword_loc"
             "      ~~ 0.dest_loc"
-            "~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~ 0.loc",
+            only_if=lambda ver: ver < (3, 0))
 
     def test_del(self):
         self.assertParsesSuite(
@@ -1029,28 +1111,48 @@ class ParserTestCase(unittest.TestCase):
 
     def test_raise(self):
         self.assertParsesSuite(
-            [{'ty': 'Raise', 'type': None, 'inst': None, 'tback': None}],
+            [{'ty': 'Raise', 'exc': None, 'inst': None,
+              'tback': None, 'cause': None}],
             "raise",
             "~~~~~ 0.keyword_loc"
-            "~~~~~ 0.loc")
+            "~~~~~ 0.loc",
+            validate_if=lambda: False)
 
         self.assertParsesSuite(
-            [{'ty': 'Raise', 'type': self.ast_x, 'inst': None, 'tback': None}],
+            [{'ty': 'Raise', 'exc': self.ast_x, 'inst': None,
+              'tback': None, 'cause': None}],
             "raise x",
             "~~~~~ 0.keyword_loc"
-            "~~~~~~~ 0.loc")
+            "~~~~~~~ 0.loc",
+            validate_if=lambda: False)
 
         self.assertParsesSuite(
-            [{'ty': 'Raise', 'type': self.ast_x, 'inst': self.ast_y, 'tback': None}],
+            [{'ty': 'Raise', 'exc': self.ast_x, 'inst': self.ast_y,
+              'tback': None, 'cause': None}],
             "raise x, y",
             "~~~~~ 0.keyword_loc"
-            "~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~ 0.loc",
+            only_if=lambda ver: ver < (3, 0),
+            validate_if=lambda: False)
 
         self.assertParsesSuite(
-            [{'ty': 'Raise', 'type': self.ast_x, 'inst': self.ast_y, 'tback': self.ast_z}],
+            [{'ty': 'Raise', 'exc': self.ast_x, 'inst': self.ast_y,
+              'tback': self.ast_z, 'cause': None}],
             "raise x, y, z",
             "~~~~~ 0.keyword_loc"
-            "~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~ 0.loc",
+            only_if=lambda ver: ver < (3, 0),
+            validate_if=lambda: False)
+
+        self.assertParsesSuite(
+            [{'ty': 'Raise', 'exc': self.ast_x, 'inst': None,
+              'tback': None, 'cause': self.ast_y}],
+            "raise x from y",
+            "~~~~~ 0.keyword_loc"
+            "        ~~~~ 0.from_loc"
+            "~~~~~~~~~~~~~~ 0.loc",
+            only_if=lambda ver: ver >= (3, 0),
+            validate_if=lambda: False)
 
     def test_import(self):
         self.assertParsesSuite(
@@ -1149,6 +1251,14 @@ class ParserTestCase(unittest.TestCase):
             "     ~~ 0.dots_loc"
             "~~~~~~~~~~~~~~~~~~ 0.loc")
 
+        self.assertParsesSuite(
+            [{'ty': 'ImportFrom', 'names': [
+                {'ty': 'alias', 'name': 'foo', 'asname': None}
+            ], 'module': None, 'level': 3}],
+            "from ... import foo",
+            "     ~~~ 0.dots_loc"
+            "~~~~~~~~~~~~~~~~~~~ 0.loc")
+
     def test_global(self):
         self.assertParsesSuite(
             [{'ty': 'Global', 'names': ['x', 'y']}],
@@ -1158,26 +1268,39 @@ class ParserTestCase(unittest.TestCase):
             "          ^ 0.name_locs.1"
             "~~~~~~~~~~~ 0.loc")
 
+    def test_nonlocal(self):
+        self.assertParsesSuite(
+            [{'ty': 'Nonlocal', 'names': ['x', 'y']}],
+            "nonlocal x, y",
+            "~~~~~~~~ 0.keyword_loc"
+            "         ^ 0.name_locs.0"
+            "            ^ 0.name_locs.1"
+            "~~~~~~~~~~~~~ 0.loc",
+            only_if=lambda ver: ver >= (3, 0))
+
     def test_exec(self):
         self.assertParsesSuite(
             [{'ty': 'Exec', 'body': self.ast_1, 'globals': None, 'locals': None}],
             "exec 1",
             "~~~~ 0.keyword_loc"
-            "~~~~~~ 0.loc")
+            "~~~~~~ 0.loc",
+            only_if=lambda ver: ver < (3, 0))
 
         self.assertParsesSuite(
             [{'ty': 'Exec', 'body': self.ast_1, 'globals': self.ast_2, 'locals': None}],
             "exec 1 in 2",
             "~~~~ 0.keyword_loc"
             "       ~~ 0.in_loc"
-            "~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~ 0.loc",
+            only_if=lambda ver: ver < (3, 0))
 
         self.assertParsesSuite(
             [{'ty': 'Exec', 'body': self.ast_1, 'globals': self.ast_2, 'locals': self.ast_3}],
             "exec 1 in 2, 3",
             "~~~~ 0.keyword_loc"
             "       ~~ 0.in_loc"
-            "~~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~~ 0.loc",
+            only_if=lambda ver: ver < (3, 0))
 
     def test_assert(self):
         self.assertParsesSuite(
@@ -1304,7 +1427,8 @@ class ParserTestCase(unittest.TestCase):
                  'body': [self.ast_expr_2]}
             ]}],
             "try:·  1·except y, t:·  2",
-            "                 ^ 0.handlers.0.as_loc")
+            "                 ^ 0.handlers.0.as_loc",
+            only_if=lambda ver: ver < (3, 0))
 
         self.assertParsesSuite(
             [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [self.ast_expr_3],
@@ -1376,32 +1500,38 @@ class ParserTestCase(unittest.TestCase):
             "     ~~~~~~ 0.items.0.loc"
             "             ~ 0.items.1.loc"
             "~~~~~~~~~~~~~~~~~~~ 0.loc",
-            only_if=lambda ver: ver >= (2, 7),
+            only_if=lambda ver: ver == (2, 7) or ver >= (3, 1),
             validate_if=lambda: sys.version_info >= (3, 0))
 
     def test_class(self):
         self.assertParsesSuite(
             [{'ty': 'ClassDef', 'name': 'x', 'bases': [],
+              'keywords': [], 'starargs': None, 'kwargs': None,
               'body': [{'ty': 'Pass'}], 'decorator_list': []}],
             "class x:·  pass",
             "~~~~~ 0.keyword_loc"
             "      ^ 0.name_loc"
             "       ^ 0.colon_loc"
-            "~~~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 0))
 
         self.assertParsesSuite(
             [{'ty': 'ClassDef', 'name': 'x', 'bases': [self.ast_y, self.ast_z],
+              'keywords': [], 'starargs': None, 'kwargs': None,
               'body': [{'ty': 'Pass'}], 'decorator_list': []}],
             "class x(y, z):·  pass",
             "       ^ 0.lparen_loc"
             "            ^ 0.rparen_loc"
-            "~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 0))
 
     def test_func(self):
         self.assertParsesSuite(
             [{'ty': 'FunctionDef', 'name': 'foo',
               'args': {'ty': 'arguments', 'args': [], 'defaults': [],
+                       'kwonlyargs': [], 'kw_defaults': [],
                        'kwarg': None, 'vararg': None},
+              'returns': None,
               'body': [{'ty': 'Pass'}], 'decorator_list': []}],
             "def foo():·  pass",
             "~~~ 0.keyword_loc"
@@ -1409,19 +1539,23 @@ class ParserTestCase(unittest.TestCase):
             "       ^ 0.args.begin_loc"
             "        ^ 0.args.end_loc"
             "         ^ 0.colon_loc"
-            "~~~~~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 2))
 
     def test_decorated(self):
         self.assertParsesSuite(
             [{'ty': 'ClassDef', 'name': 'x', 'bases': [],
+              'keywords': [], 'starargs': None, 'kwargs': None,
               'body': [{'ty': 'Pass'}], 'decorator_list': [self.ast_x]}],
             "@x·class x:·  pass",
             "^ 0.at_locs.0"
             " ^ 0.decorator_list.0.loc"
-            "~~~~~~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 0))
 
         self.assertParsesSuite(
             [{'ty': 'ClassDef', 'name': 'x', 'bases': [],
+              'keywords': [], 'starargs': None, 'kwargs': None,
               'body': [{'ty': 'Pass'}], 'decorator_list': [
                 {'ty': 'Call', 'func': self.ast_x,
                  'args': [], 'keywords': [], 'kwargs': None, 'starargs': None}
@@ -1429,10 +1563,12 @@ class ParserTestCase(unittest.TestCase):
             "@x()·class x:·  pass",
             "^ 0.at_locs.0"
             " ~~~ 0.decorator_list.0.loc"
-            "~~~~~~~~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 0))
 
         self.assertParsesSuite(
             [{'ty': 'ClassDef', 'name': 'x', 'bases': [],
+              'keywords': [], 'starargs': None, 'kwargs': None,
               'body': [{'ty': 'Pass'}], 'decorator_list': [
                 {'ty': 'Call', 'func': self.ast_x,
                  'args': [self.ast_1], 'keywords': [], 'kwargs': None, 'starargs': None}
@@ -1440,17 +1576,21 @@ class ParserTestCase(unittest.TestCase):
             "@x(1)·class x:·  pass",
             "^ 0.at_locs.0"
             " ~~~~ 0.decorator_list.0.loc"
-            "~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 0))
 
         self.assertParsesSuite(
             [{'ty': 'FunctionDef', 'name': 'x',
               'args': {'ty': 'arguments', 'args': [], 'defaults': [],
+                       'kwonlyargs': [], 'kw_defaults': [],
                        'kwarg': None, 'vararg': None},
+              'returns': None,
               'body': [{'ty': 'Pass'}], 'decorator_list': [self.ast_x]}],
             "@x·def x():·  pass",
             "^ 0.at_locs.0"
             " ^ 0.decorator_list.0.loc"
-            "~~~~~~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 0))
 
     #
     # FUNCTION AND LAMBDA ARGUMENTS
@@ -1459,101 +1599,158 @@ class ParserTestCase(unittest.TestCase):
     def test_args(self):
         self.assertParsesArgs(
             {'ty': 'arguments', 'args': [], 'defaults': [],
+             'kwonlyargs': [], 'kw_defaults': [],
              'vararg': None, 'kwarg': None},
-            "")
+            "",
+            validate_if=lambda: sys.version_info >= (3, 2))
 
         self.assertParsesArgs(
-            {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],
+            {'ty': 'arguments', 'args': [self.ast_arg_x], 'defaults': [],
+             'kwonlyargs': [], 'kw_defaults': [],
              'vararg': None, 'kwarg': None},
             "x",
             "~ args.0.loc"
-            "~ loc")
+            "~ loc",
+            validate_if=lambda: sys.version_info >= (3, 2))
 
         self.assertParsesArgs(
-            {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [self.ast_1],
+            {'ty': 'arguments', 'args': [self.ast_arg_x], 'defaults': [self.ast_1],
+             'kwonlyargs': [], 'kw_defaults': [],
              'vararg': None, 'kwarg': None},
             "x=1",
             "~ args.0.loc"
             " ~ equals_locs.0"
             "  ~ defaults.0.loc"
-            "~~~ loc")
+            "~~~ loc",
+            validate_if=lambda: sys.version_info >= (3, 2))
 
         self.assertParsesArgs(
-            {'ty': 'arguments', 'args': [self.ast_x, self.ast_y], 'defaults': [],
+            {'ty': 'arguments', 'args': [self.ast_arg_x, self.ast_arg_y], 'defaults': [],
+             'kwonlyargs': [], 'kw_defaults': [],
              'vararg': None, 'kwarg': None},
             "x, y",
-            "~~~~ loc")
+            "~~~~ loc",
+            validate_if=lambda: sys.version_info >= (3, 2))
 
         self.assertParsesArgs(
             {'ty': 'arguments', 'args': [], 'defaults': [],
-             'vararg': 'y', 'kwarg': None},
+             'kwonlyargs': [], 'kw_defaults': [],
+             'vararg': self.ast_arg_y, 'kwarg': None},
             "*y",
             "^ star_loc"
-            " ~ vararg_loc"
-            "~~ loc")
-
-        self.assertParsesArgs(
-            {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],
-             'vararg': 'y', 'kwarg': None},
-            "x, *y",
-            "   ^ star_loc"
-            "    ~ vararg_loc"
-            "~~~~~ loc")
+            " ~ vararg.arg_loc"
+            " ~ vararg.loc"
+            "~~ loc",
+            validate_if=lambda: sys.version_info >= (3, 2))
 
         self.assertParsesArgs(
             {'ty': 'arguments', 'args': [], 'defaults': [],
-             'vararg': None, 'kwarg': 'y'},
+             'kwonlyargs': [self.ast_arg_z], 'kw_defaults': [],
+             'vararg': self.ast_arg_y, 'kwarg': None},
+            "*y, z",
+            "~~~~~ loc",
+            only_if=lambda ver: ver >= (3, 0),
+            validate_if=lambda: sys.version_info >= (3, 2))
+
+        self.assertParsesArgs(
+            {'ty': 'arguments', 'args': [], 'defaults': [],
+             'kwonlyargs': [self.ast_arg_z, self.ast_arg_t], 'kw_defaults': [self.ast_1],
+             'vararg': self.ast_arg_y, 'kwarg': None},
+            "*y, z, t=1",
+            "~~~~~~~~~~ loc",
+            only_if=lambda ver: ver >= (3, 0),
+            validate_if=lambda: sys.version_info >= (3, 2))
+
+        self.assertParsesArgs(
+            {'ty': 'arguments', 'args': [self.ast_arg_x], 'defaults': [],
+             'kwonlyargs': [], 'kw_defaults': [],
+             'vararg': self.ast_arg_y, 'kwarg': None},
+            "x, *y",
+            "   ^ star_loc"
+            "~~~~~ loc",
+            validate_if=lambda: sys.version_info >= (3, 2))
+
+        self.assertParsesArgs(
+            {'ty': 'arguments', 'args': [], 'defaults': [],
+             'kwonlyargs': [], 'kw_defaults': [],
+             'vararg': None, 'kwarg': self.ast_arg_y},
             "**y",
             "^^ dstar_loc"
-            "  ~ kwarg_loc"
-            "~~~ loc")
+            "~~~ loc",
+            validate_if=lambda: sys.version_info >= (3, 2))
 
         self.assertParsesArgs(
-            {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],
-             'vararg': None, 'kwarg': 'y'},
+            {'ty': 'arguments', 'args': [self.ast_arg_x], 'defaults': [],
+             'kwonlyargs': [], 'kw_defaults': [],
+             'vararg': None, 'kwarg': self.ast_arg_y},
             "x, **y",
             "   ^^ dstar_loc"
-            "     ~ kwarg_loc"
-            "~~~~~~ loc")
+            "~~~~~~ loc",
+            validate_if=lambda: sys.version_info >= (3, 2))
 
         self.assertParsesArgs(
-            {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],
-             'vararg': 'y', 'kwarg': 'z'},
+            {'ty': 'arguments', 'args': [self.ast_arg_x], 'defaults': [],
+             'kwonlyargs': [], 'kw_defaults': [],
+             'vararg': self.ast_arg_y, 'kwarg': self.ast_arg_z},
             "x, *y, **z",
             "   ^ star_loc"
-            "    ~ vararg_loc"
             "       ^^ dstar_loc"
-            "         ~ kwarg_loc"
-            "~~~~~~~~~~ loc")
+            "~~~~~~~~~~ loc",
+            validate_if=lambda: sys.version_info >= (3, 2))
 
         self.assertParsesArgs(
             {'ty': 'arguments', 'defaults': [], 'vararg': None, 'kwarg': None,
-             'args': [{'ty': 'Tuple', 'ctx': None, 'elts': [self.ast_x, self.ast_y]}]},
+             'kwonlyargs': [], 'kw_defaults': [],
+             'args': [{'ty': 'Tuple', 'ctx': None, 'elts': [self.ast_arg_x, self.ast_arg_y]}]},
             "(x,y)",
             "^ args.0.begin_loc"
             "    ^ args.0.end_loc"
             "~~~~~ args.0.loc"
-            "~~~~~ loc")
+            "~~~~~ loc",
+            only_if=lambda ver: ver < (3, 0),
+            validate_if=lambda: False)
 
     def test_args_def(self):
         self.assertParsesSuite(
             [{'ty': 'FunctionDef', 'name': 'foo',
-              'args': {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],
+              'args': {'ty': 'arguments', 'args': [self.ast_arg_x], 'defaults': [],
+                       'kwonlyargs': [], 'kw_defaults': [],
                        'kwarg': None, 'vararg': None},
+              'returns': None,
               'body': [{'ty': 'Pass'}], 'decorator_list': []}],
-            "def foo(x):·  pass")
+            "def foo(x):·  pass",
+            validate_if=lambda: sys.version_info >= (3, 0))
+
+    def test_def_typed(self):
+        self.assertParsesSuite(
+            [{'ty': 'FunctionDef', 'name': 'foo',
+              'args': {'ty': 'arguments',
+                       'args': [{'ty': 'arg', 'arg': 'x', 'annotation': self.ast_y}],
+                       'defaults': [],
+                       'kwonlyargs': [], 'kw_defaults': [],
+                       'kwarg': None, 'vararg': None},
+              'returns': self.ast_z,
+              'body': [{'ty': 'Pass'}], 'decorator_list': []}],
+            "def foo(x: y) -> z:·  pass",
+            "         ^ 0.args.args.0.colon_loc"
+            "        ~~~~ 0.args.args.0.loc"
+            "              ^^ 0.arrow_loc",
+            only_if=lambda ver: ver >= (3, 0),
+            validate_if=lambda: sys.version_info >= (3, 0))
 
     def test_args_oldlambda(self):
         self.assertParsesExpr(
             {'ty': 'ListComp', 'elt': self.ast_x, 'generators': [
                 {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y,
                  'ifs': [{'ty': 'Lambda',
-                     'args': {'ty': 'arguments', 'args': [self.ast_x], 'defaults': [],
+                     'args': {'ty': 'arguments', 'args': [self.ast_arg_x], 'defaults': [],
+                              'kwonlyargs': [], 'kw_defaults': [],
                               'kwarg': None, 'vararg': None},
                      'body': self.ast_t}
                 ]}
             ]},
-            "[x for y in z if lambda x: t]")
+            "[x for y in z if lambda x: t]",
+            validate_if=lambda: sys.version_info >= (3, 2))
 
     #
     # PARSING MODES
@@ -1657,7 +1854,9 @@ class ParserTestCase(unittest.TestCase):
             "x(*y, z)",
             'fatal', "only named arguments may follow *expression", {},
             "      ^ 0"
-            "  ~~ 1")
+            "  ~~ 1",
+            # see test_call
+            only_if=lambda ver: ver not in ((3, 0), (3, 1)))
 
         self.assertDiagnoses(
             "x(y=1, z)",

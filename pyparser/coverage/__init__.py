@@ -64,6 +64,11 @@ def instrument():
             in_square -= 1
 
         if token.kind in ('def', 'if', 'elif', 'else', 'for') and in_square == 0:
+            if token.kind == 'def':
+                ident = lex.next()
+                if ident.value[0] == '_':
+                    stmt_stack.append(None)
+                    continue
             all_stmt_list.append((token.loc.begin_pos, token.loc.end_pos))
             stmt_stack.append("_all_stmts[(%d,%d)] = True\n" %
                                 (token.loc.begin_pos, token.loc.end_pos))
@@ -82,12 +87,22 @@ def instrument():
 
 # Produce an HTML report for test coverage of parser rules.
 def report(parser, name='parser'):
-    rewriter = source.Rewriter(_buf)
-    total_pts = 0
-    total_covered = 0
+    all_locs = dict()
     for rule in parser._all_rules:
         pts = len(rule.covered)
         covered = len(list(filter(lambda x: x, rule.covered)))
+        if rule.loc in all_locs:
+            pts_, covered_ = all_locs[rule.loc]
+            if covered > covered_:
+                all_locs[rule.loc] = pts, covered
+        else:
+            all_locs[rule.loc] = pts, covered
+
+    rewriter = source.Rewriter(_buf)
+    total_pts = 0
+    total_covered = 0
+    for loc in all_locs:
+        pts, covered = all_locs[loc]
         if covered == 0:
             klass, hint = 'uncovered', None
         elif covered < pts:
@@ -95,12 +110,12 @@ def report(parser, name='parser'):
         else:
             klass, hint = 'covered', None
 
-        loc = source.Range(_buf, *rule.loc)
+        sloc = source.Range(_buf, *rule.loc)
         if hint:
-            rewriter.insert_before(loc, r"<span class='%s' title='%s'>" % (klass, hint))
+            rewriter.insert_before(sloc, r"<span class='%s' title='%s'>" % (klass, hint))
         else:
-            rewriter.insert_before(loc, r"<span class='%s'>" % klass)
-        rewriter.insert_after(loc, r"</span>")
+            rewriter.insert_before(sloc, r"<span class='%s'>" % klass)
+        rewriter.insert_after(sloc, r"</span>")
 
         total_pts += pts
         total_covered += covered

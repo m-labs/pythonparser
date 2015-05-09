@@ -43,6 +43,7 @@ from . import source, diagnostic, lexer, ast
 
 # Coverage data
 _all_rules = []
+_all_stmts = {}
 
 # Generic LL parsing combinators
 class Unmatched:
@@ -331,7 +332,7 @@ def BeginEnd(begin_tok, inner_rule, end_tok, empty=None, loc=None):
     @action(Seq(Loc(begin_tok), inner_rule, Loc(end_tok)), loc=loc)
     def rule(parser, begin_loc, node, end_loc):
         if node is None:
-            node = empty()
+            node = empty(parser)
 
         # Collection nodes don't have loc yet. If a node has loc at this
         # point, it means it's an expression passed in parentheses.
@@ -395,12 +396,80 @@ class Parser:
 
     # Python-specific methods
     def _init_version(self, version):
-        if version == (2, 6):
-            self.with_stmt = self.with_stmt__26
-            self.atom_6    = self.atom_6__26
-        elif version == (2, 7):
-            self.with_stmt = self.with_stmt__27
-            self.atom_6    = self.atom_6__27
+        if version in ((2, 6), (2, 7)):
+            if version == (2, 6):
+                self.with_stmt       = self.with_stmt__26
+                self.atom_6          = self.atom_6__26
+            else:
+                self.with_stmt       = self.with_stmt__27
+                self.atom_6          = self.atom_6__27
+            self.except_clause_1 = self.except_clause_1__26
+            self.classdef        = self.classdef__26
+            self.subscript       = self.subscript__26
+            self.raise_stmt      = self.raise_stmt__26
+            self.comp_if         = self.comp_if__26
+            self.atom            = self.atom__26
+            self.funcdef         = self.funcdef__26
+            self.parameters      = self.parameters__26
+            self.varargslist     = self.varargslist__26
+            self.comparison_1    = self.comparison_1__26
+            self.exprlist_1      = self.exprlist_1__26
+            return
+        elif version in ((3, 0), (3, 1)):
+            if version == (3, 0):
+                self.with_stmt       = self.with_stmt__26 # lol
+            else:
+                self.with_stmt       = self.with_stmt__27
+            self.except_clause_1 = self.except_clause_1__30
+            self.classdef        = self.classdef__30
+            self.subscript       = self.subscript__30
+            self.raise_stmt      = self.raise_stmt__30
+            self.comp_if         = self.comp_if__30
+            self.atom            = self.atom__30
+            self.funcdef         = self.funcdef__30
+            self.parameters      = self.parameters__30
+            self.varargslist     = self.varargslist__30
+            self.comparison_1    = self.comparison_1__30
+            self.exprlist_1      = self.exprlist_1__30
+            return
+
+        raise NotImplementedError("pyparser.parser.Parser cannot parse Python %s" %
+                                  str(version))
+
+    def _arguments(self, args=None, defaults=None, kwonlyargs=None, kw_defaults=None,
+                   vararg=None, kwarg=None,
+                   star_loc=None, dstar_loc=None, begin_loc=None, end_loc=None,
+                   equals_locs=None, kw_equals_locs=None, loc=None):
+        if args is None:
+            args = []
+        if defaults is None:
+            defaults = []
+        if kwonlyargs is None:
+            kwonlyargs = []
+        if kw_defaults is None:
+            kw_defaults = []
+        if equals_locs is None:
+            equals_locs = []
+        if kw_equals_locs is None:
+            kw_equals_locs = []
+        return ast.arguments(args=args, defaults=defaults,
+                             kwonlyargs=kwonlyargs, kw_defaults=kw_defaults,
+                             vararg=vararg, kwarg=kwarg,
+                             star_loc=star_loc, dstar_loc=dstar_loc,
+                             begin_loc=begin_loc, end_loc=end_loc,
+                             equals_locs=equals_locs, kw_equals_locs=kw_equals_locs,
+                             loc=loc)
+
+    def _arg(self, tok, colon_loc=None, annotation=None):
+        loc = tok.loc
+        if annotation:
+            loc = loc.join(annotation.loc)
+        return ast.arg(arg=tok.value, annotation=annotation,
+                       arg_loc=tok.loc, colon_loc=colon_loc, loc=loc)
+
+    def _empty_arglist(self):
+        return ast.Call(args=[], keywords=[], starargs=None, kwargs=None,
+                        star_loc=None, dstar_loc=None, loc=None)
 
     def _wrap_tuple(self, elts):
         assert len(elts) > 0
@@ -412,7 +481,7 @@ class Parser:
 
     def _assignable(self, node, is_delete=False):
         if isinstance(node, ast.Name) or isinstance(node, ast.Subscript) or \
-                isinstance(node, ast.Attribute):
+                isinstance(node, ast.Attribute) or isinstance(node, ast.Starred):
             return node
         elif (isinstance(node, ast.List) or isinstance(node, ast.Tuple)) and \
                 any(node.elts):
@@ -426,15 +495,6 @@ class Parser:
                 error = diagnostic.Diagnostic(
                     "fatal", "cannot assign to this expression", {}, node.loc)
             raise diagnostic.DiagnosticException(error)
-
-    def _empty_arguments(self):
-        return ast.arguments(args=[], defaults=[], vararg=None, kwarg=None,
-                             star_loc=None, vararg_loc=None, dstar_loc=None, kwarg_loc=None,
-                             equals_locs=[], begin_loc=None, end_loc=None, loc=None)
-
-    def _empty_arglist(self):
-        return ast.Call(args=[], keywords=[], starargs=None, kwargs=None,
-                        star_loc=None, dstar_loc=None, loc=None)
 
     def add_flags(self, flags):
         if 'print_function' in flags:
@@ -465,14 +525,10 @@ class Parser:
         """eval_input: testlist NEWLINE* ENDMARKER"""
         return ast.Expression(body=[expr], loc=expr.loc)
 
-    @action(Opt(Rule('arglist')))
-    def decorator_1(self, args):
-        if args is None:
-            return self._empty_arglist()
-        return args
-
-    @action(Seq(Loc('@'), Rule('dotted_name'), Opt(BeginEnd('(', decorator_1, ')')),
-            Loc('newline')))
+    @action(Seq(Loc('@'), Rule('dotted_name'),
+                Opt(BeginEnd('(', Opt(Rule('arglist')), ')',
+                             empty=_empty_arglist)),
+                Loc('newline')))
     def decorator(self, at_loc, dotted_name, call_opt, newline_loc):
         """decorator: '@' dotted_name [ '(' [arglist] ')' ] NEWLINE"""
         name_loc, name = dotted_name
@@ -495,57 +551,69 @@ class Parser:
         return classfuncdef
 
     @action(Seq(Loc('def'), Tok('ident'), Rule('parameters'), Loc(':'), Rule('suite')))
-    def funcdef(self, def_loc, ident_tok, args, colon_loc, suite):
-        """funcdef: 'def' NAME parameters ':' suite"""
-        return ast.FunctionDef(name=ident_tok.value, args=args, body=suite, decorator_list=[],
+    def funcdef__26(self, def_loc, ident_tok, args, colon_loc, suite):
+        """(2.6, 2.7) funcdef: 'def' NAME parameters ':' suite"""
+        return ast.FunctionDef(name=ident_tok.value, args=args, returns=None,
+                               body=suite, decorator_list=[],
                                at_locs=[], keyword_loc=def_loc, name_loc=ident_tok.loc,
-                               colon_loc=colon_loc, loc=def_loc.join(suite[-1].loc))
+                               colon_loc=colon_loc, arrow_loc=None,
+                               loc=def_loc.join(suite[-1].loc))
 
-    @action(Opt(Rule('varargslist')))
-    def parameters_1(self, args):
-        if args is None:
-            args = self._empty_arguments()
-        return args
+    @action(Seq(Loc('def'), Tok('ident'), Rule('parameters'),
+                Opt(Seq(Loc('->'), Rule('test'))),
+                Loc(':'), Rule('suite')))
+    def funcdef__30(self, def_loc, ident_tok, args, returns_opt, colon_loc, suite):
+        """(3.0-) funcdef: 'def' NAME parameters ['->' test] ':' suite"""
+        arrow_loc = returns = None
+        if returns_opt:
+            arrow_loc, returns = returns_opt
+        return ast.FunctionDef(name=ident_tok.value, args=args, returns=returns,
+                               body=suite, decorator_list=[],
+                               at_locs=[], keyword_loc=def_loc, name_loc=ident_tok.loc,
+                               colon_loc=colon_loc, arrow_loc=arrow_loc,
+                               loc=def_loc.join(suite[-1].loc))
 
-    parameters = BeginEnd('(', parameters_1, ')')
-    """parameters: '(' [varargslist] ')'"""
+    parameters__26 = BeginEnd('(', Opt(Rule('varargslist')), ')', empty=_arguments)
+    """(2.6, 2.7) parameters: '(' [varargslist] ')'"""
 
-    varargslist_1 = Seq(Rule('fpdef'), Opt(Seq(Loc('='), Rule('test'))))
+    parameters__30 = BeginEnd('(', Opt(Rule('typedargslist')), ')', empty=_arguments)
+    """(3.0) parameters: '(' [typedargslist] ')'"""
+
+    varargslist__26_1 = Seq(Rule('fpdef'), Opt(Seq(Loc('='), Rule('test'))))
 
     @action(Seq(Loc('**'), Tok('ident')))
-    def varargslist_2(self, dstar_loc, kwarg_tok):
-        return ast.arguments(args=[], defaults=[], vararg=None, kwarg=kwarg_tok.value,
-                             star_loc=None, vararg_loc=None,
-                             dstar_loc=dstar_loc, kwarg_loc=kwarg_tok.loc,
-                             begin_loc=None, end_loc=None, equals_locs=[],
-                             loc=dstar_loc.join(kwarg_tok.loc))
+    def varargslist__26_2(self, dstar_loc, kwarg_tok):
+        return self._arguments(kwarg=self._arg(kwarg_tok),
+                               dstar_loc=dstar_loc, loc=dstar_loc.join(kwarg_tok.loc))
 
     @action(Seq(Loc('*'), Tok('ident'),
                 Opt(Seq(Tok(','), Loc('**'), Tok('ident')))))
-    def varargslist_3(self, star_loc, vararg_tok, kwarg_opt):
-        dstar_loc = kwarg = kwarg_loc = None
+    def varargslist__26_3(self, star_loc, vararg_tok, kwarg_opt):
+        dstar_loc = kwarg = None
         loc = star_loc.join(vararg_tok.loc)
+        vararg = self._arg(vararg_tok)
         if kwarg_opt:
             _, dstar_loc, kwarg_tok = kwarg_opt
-            kwarg, kwarg_loc = kwarg_tok.value, kwarg_tok.loc
+            kwarg = self._arg(kwarg_tok)
             loc = star_loc.join(kwarg_tok.loc)
-        return ast.arguments(args=[], defaults=[], vararg=vararg_tok.value, kwarg=kwarg,
-                             star_loc=star_loc, vararg_loc=vararg_tok.loc,
-                             dstar_loc=dstar_loc, kwarg_loc=kwarg_loc,
-                             begin_loc=None, end_loc=None, equals_locs=[], loc=loc)
+        return self._arguments(vararg=vararg, kwarg=kwarg,
+                               star_loc=star_loc, dstar_loc=dstar_loc, loc=loc)
 
     @action(Eps(value=()))
-    def varargslist_4(self):
-        return self._empty_arguments()
+    def varargslist__26_4(self):
+        return self._arguments()
 
-    @action(Alt(Seq(Star(SeqN(0, varargslist_1, Tok(','))),
-                    Alt(varargslist_2, varargslist_3)),
-                Seq(List(varargslist_1, ',', trailing=True),
-                    varargslist_4)))
-    def varargslist(self, fparams, args):
-        """varargslist: ((fpdef ['=' test] ',')*
-                         ('*' NAME [',' '**' NAME] | '**' NAME) |
-                         fpdef ['=' test] (',' fpdef ['=' test])* [','])"""
+    @action(Alt(Seq(Star(SeqN(0, varargslist__26_1, Tok(','))),
+                    Alt(varargslist__26_2, varargslist__26_3)),
+                Seq(List(varargslist__26_1, ',', trailing=True),
+                    varargslist__26_4)))
+    def varargslist__26(self, fparams, args):
+        """
+        (2.6, 2.7)
+        varargslist: ((fpdef ['=' test] ',')*
+                      ('*' NAME [',' '**' NAME] | '**' NAME) |
+                      fpdef ['=' test] (',' fpdef ['=' test])* [','])
+        """
         for fparam, default_opt in fparams:
             if default_opt:
                 equals_loc, default = default_opt
@@ -575,11 +643,112 @@ class Parser:
 
     @action(Tok('ident'))
     def fpdef_1(self, ident_tok):
-        return ast.Name(id=ident_tok.value, loc=ident_tok.loc, ctx=None)
+        return ast.arg(arg=ident_tok.value, annotation=None,
+                       arg_loc=ident_tok.loc, colon_loc=None,
+                       loc=ident_tok.loc)
 
     fpdef = Alt(fpdef_1, BeginEnd('(', Rule('fplist'), ')',
-                                  empty=lambda: ast.Tuple(elts=[], ctx=None, loc=None)))
+                                  empty=lambda self: ast.Tuple(elts=[], ctx=None, loc=None)))
     """fpdef: NAME | '(' fplist ')'"""
+
+    def _argslist(fpdef_rule):
+        argslist_1 = Seq(fpdef_rule, Opt(Seq(Loc('='), Rule('test'))))
+
+        @action(Seq(Loc('**'), Tok('ident')))
+        def argslist_2(self, dstar_loc, kwarg_tok):
+            return self._arguments(kwarg=self._arg(kwarg_tok),
+                                   dstar_loc=dstar_loc, loc=dstar_loc.join(kwarg_tok.loc))
+
+        @action(Seq(Loc('*'), Tok('ident'),
+                    Star(SeqN(1, Tok(','), argslist_1)),
+                    Opt(Seq(Tok(','), Loc('**'), Tok('ident')))))
+        def argslist_3(self, star_loc, vararg_tok, fparams, kwarg_opt):
+            dstar_loc = kwarg = None
+            loc = star_loc.join(vararg_tok.loc)
+            vararg = self._arg(vararg_tok)
+            if kwarg_opt:
+                _, dstar_loc, kwarg_tok = kwarg_opt
+                kwarg = self._arg(kwarg_tok)
+                loc = star_loc.join(kwarg_tok.loc)
+            kwonlyargs, kw_defaults, kw_equals_locs = [], [], []
+            for fparam, default_opt in fparams:
+                if default_opt:
+                    equals_loc, default = default_opt
+                    kw_equals_locs.append(equals_loc)
+                    kw_defaults.append(default)
+                kwonlyargs.append(fparam)
+            if any(kw_defaults):
+                loc = loc.join(kw_defaults[-1].loc)
+            elif any(kwonlyargs):
+                loc = loc.join(kwonlyargs[-1].loc)
+            return self._arguments(vararg=vararg, kwarg=kwarg,
+                                   kwonlyargs=kwonlyargs, kw_defaults=kw_defaults,
+                                   star_loc=star_loc, dstar_loc=dstar_loc,
+                                   kw_equals_locs=kw_equals_locs, loc=loc)
+
+        @action(Eps(value=()))
+        def argslist_4(self):
+            return self._arguments()
+
+        @action(Alt(Seq(Star(SeqN(0, argslist_1, Tok(','))),
+                        Alt(argslist_2, argslist_3)),
+                    Seq(List(argslist_1, ',', trailing=True),
+                        argslist_4)))
+        def argslist(self, fparams, args):
+            for fparam, default_opt in fparams:
+                if default_opt:
+                    equals_loc, default = default_opt
+                    args.equals_locs.append(equals_loc)
+                    args.defaults.append(default)
+                elif len(args.defaults) > 0:
+                    error = diagnostic.Diagnostic(
+                        "fatal", "non-default argument follows default argument", {},
+                        fparam.loc, [args.args[-1].loc.join(args.defaults[-1].loc)])
+                    raise diagnostic.DiagnosticException(error)
+
+                args.args.append(fparam)
+
+            def fparam_loc(fparam, default_opt):
+                if default_opt:
+                    equals_loc, default = default_opt
+                    return fparam.loc.join(default.loc)
+                else:
+                    return fparam.loc
+
+            if args.loc is None:
+                args.loc = fparam_loc(*fparams[0]).join(fparam_loc(*fparams[-1]))
+            elif len(fparams) > 0:
+                args.loc = args.loc.join(fparam_loc(*fparams[0]))
+
+            return args
+        return argslist
+
+    typedargslist = _argslist(Rule('tfpdef'))
+    """
+    (3.0-)
+    typedargslist: ((tfpdef ['=' test] ',')*
+                    ('*' [tfpdef] (',' tfpdef ['=' test])* [',' '**' tfpdef] | '**' tfpdef)
+                    | tfpdef ['=' test] (',' tfpdef ['=' test])* [','])
+    """
+
+    varargslist__30 = _argslist(Rule('vfpdef'))
+    """
+    (3.0-)
+    varargslist: ((vfpdef ['=' test] ',')*
+                  ('*' [vfpdef] (',' vfpdef ['=' test])*  [',' '**' vfpdef] | '**' vfpdef)
+                  | vfpdef ['=' test] (',' vfpdef ['=' test])* [','])
+    """
+
+    @action(Seq(Tok('ident'), Opt(Seq(Loc(':'), Rule('test')))))
+    def tfpdef(self, ident_tok, annotation_opt):
+        """(3.0-) tfpdef: NAME [':' test]"""
+        if annotation_opt:
+            colon_loc, annotation = annotation_opt
+            return self._arg(ident_tok, colon_loc, annotation)
+        return self._arg(ident_tok)
+
+    vfpdef = fpdef_1
+    """(3.0-) vfpdef: NAME"""
 
     @action(List(Rule('fpdef'), ',', trailing=True))
     def fplist(self, elts):
@@ -594,9 +763,16 @@ class Parser:
 
     small_stmt = Alt(Rule('expr_stmt'), Rule('print_stmt'),  Rule('del_stmt'),
                      Rule('pass_stmt'), Rule('flow_stmt'), Rule('import_stmt'),
-                     Rule('global_stmt'), Rule('exec_stmt'), Rule('assert_stmt'))
-    """small_stmt: (expr_stmt | print_stmt  | del_stmt | pass_stmt | flow_stmt |
-                    import_stmt | global_stmt | exec_stmt | assert_stmt)"""
+                     Rule('global_stmt'), Rule('nonlocal_stmt'), Rule('exec_stmt'),
+                     Rule('assert_stmt'))
+    """
+    (2.6, 2.7)
+    small_stmt: (expr_stmt | print_stmt  | del_stmt | pass_stmt | flow_stmt |
+                 import_stmt | global_stmt | exec_stmt | assert_stmt)
+    (3.0-)
+    small_stmt: (expr_stmt | del_stmt | pass_stmt | flow_stmt |
+                 import_stmt | global_stmt | nonlocal_stmt | assert_stmt)
+    """
 
     @action(Seq(Rule('augassign'), Alt(Rule('yield_expr'), Rule('testlist'))))
     def expr_stmt_1(self, augassign, rhs_expr):
@@ -709,8 +885,8 @@ class Parser:
     @action(Seq(Loc('raise'), Opt(Seq(Rule('test'),
                                       Opt(Seq(Tok(','), Rule('test'),
                                               Opt(SeqN(1, Tok(','), Rule('test')))))))))
-    def raise_stmt(self, raise_loc, type_opt):
-        """raise_stmt: 'raise' [test [',' test [',' test]]]"""
+    def raise_stmt__26(self, raise_loc, type_opt):
+        """(2.6, 2.7) raise_stmt: 'raise' [test [',' test [',' test]]]"""
         type_ = inst = tback = None
         loc = raise_loc
         if type_opt:
@@ -721,8 +897,22 @@ class Parser:
                 loc = loc.join(inst.loc)
                 if tback:
                     loc = loc.join(tback.loc)
-        return ast.Raise(type=type_, inst=inst, tback=tback,
-                         keyword_loc=raise_loc, loc=loc)
+        return ast.Raise(exc=type_, inst=inst, tback=tback, cause=None,
+                         keyword_loc=raise_loc, from_loc=None, loc=loc)
+
+    @action(Seq(Loc('raise'), Opt(Seq(Rule('test'), Opt(Seq(Loc('from'), Rule('test')))))))
+    def raise_stmt__30(self, raise_loc, exc_opt):
+        """(3.0-) raise_stmt: 'raise' [test ['from' test]]"""
+        exc = from_loc = cause = None
+        loc = raise_loc
+        if exc_opt:
+            exc, cause_opt = exc_opt
+            loc = loc.join(exc.loc)
+            if cause_opt:
+                from_loc, cause = cause_opt
+                loc = loc.join(cause.loc)
+        return ast.Raise(exc=exc, inst=None, tback=None, cause=cause,
+                         keyword_loc=raise_loc, from_loc=from_loc, loc=loc)
 
     import_stmt = Alt(Rule('import_name'), Rule('import_from'))
     """import_stmt: import_name | import_from"""
@@ -733,40 +923,58 @@ class Parser:
         return ast.Import(names=names,
                           keyword_loc=import_loc, loc=import_loc.join(names[-1].loc))
 
-    @action(Seq(Star(Loc('.')), Rule('dotted_name')))
-    def import_from_1(self, dots, dotted_name):
-        return dots, dotted_name
+    @action(Loc('.'))
+    def import_from_1(self, loc):
+        return 1, loc
 
-    @action(Plus(Loc('.')))
-    def import_from_2(self, dots):
-        return dots, None
+    @action(Loc('...'))
+    def import_from_2(self, loc):
+        return 3, loc
+
+    @action(Seq(Star(Alt(import_from_1, import_from_2)), Rule('dotted_name')))
+    def import_from_3(self, dots, dotted_name):
+        dots_loc, dots_count = None, 0
+        if any(dots):
+            dots_loc = dots[0][1].join(dots[-1][1])
+            dots_count = sum([count for count, loc in dots])
+        return (dots_loc, dots_count), dotted_name
+
+    @action(Plus(Alt(import_from_1, import_from_2)))
+    def import_from_4(self, dots):
+        dots_loc = dots[0][1].join(dots[-1][1])
+        dots_count = sum([count for count, loc in dots])
+        return (dots_loc, dots_count), None
 
     @action(Loc('*'))
-    def import_from_3(self, star_loc):
-        return None, \
+    def import_from_5(self, star_loc):
+        return (None, 0), \
                [ast.alias(name='*', asname=None,
                           name_loc=star_loc, as_loc=None, asname_loc=None, loc=star_loc)], \
                None
 
     @action(Rule('import_as_names'))
-    def import_from_4(self, names):
-        return None, names, None
+    def import_from_6(self, names):
+        return (None, 0), names, None
 
-    @action(Seq(Loc('from'), Alt(import_from_1, import_from_2),
-                Loc('import'), Alt(import_from_3,
+    @action(Seq(Loc('from'), Alt(import_from_3, import_from_4),
+                Loc('import'), Alt(import_from_5,
                                    Seq(Loc('('), Rule('import_as_names'), Loc(')')),
-                                   import_from_4)))
+                                   import_from_6)))
     def import_from(self, from_loc, module_name, import_loc, names):
-        """import_from: ('from' ('.'* dotted_name | '.'+)
-                         'import' ('*' | '(' import_as_names ')' | import_as_names))"""
-        dots, dotted_name_opt = module_name
+        """
+        (2.6, 2.7)
+        import_from: ('from' ('.'* dotted_name | '.'+)
+                      'import' ('*' | '(' import_as_names ')' | import_as_names))
+        (3.0-)
+        # note below: the ('.' | '...') is necessary because '...' is tokenized as ELLIPSIS
+        import_from: ('from' (('.' | '...')* dotted_name | ('.' | '...')+)
+                      'import' ('*' | '(' import_as_names ')' | import_as_names))
+        """
+        (dots_loc, dots_count), dotted_name_opt = module_name
         module_loc = module = None
         if dotted_name_opt:
             module_loc, module = dotted_name_opt
         lparen_loc, names, rparen_loc = names
-        dots_loc = None
-        if dots != []:
-            dots_loc = dots[0].join(dots[-1])
         loc = from_loc.join(names[-1].loc)
         if rparen_loc:
             loc = loc.join(rparen_loc)
@@ -774,7 +982,7 @@ class Parser:
         if module == '__future__':
             self.add_flags([x.name for x in names])
 
-        return ast.ImportFrom(names=names, module=module, level=len(dots),
+        return ast.ImportFrom(names=names, module=module, level=dots_count,
                               keyword_loc=from_loc, dots_loc=dots_loc, module_loc=module_loc,
                               import_loc=import_loc, lparen_loc=lparen_loc, rparen_loc=rparen_loc,
                               loc=loc)
@@ -829,7 +1037,7 @@ class Parser:
                 Opt(Seq(Loc('in'), Rule('test'),
                         Opt(SeqN(1, Loc(','), Rule('test')))))))
     def exec_stmt(self, exec_loc, body, in_opt):
-        """exec_stmt: 'exec' expr ['in' test [',' test]]"""
+        """(2.6, 2.7) exec_stmt: 'exec' expr ['in' test [',' test]]"""
         in_loc, globals, locals = None, None, None
         loc = exec_loc.join(body.loc)
         if in_opt:
@@ -840,6 +1048,13 @@ class Parser:
                 loc = loc.join(globals.loc)
         return ast.Exec(body=body, locals=locals, globals=globals,
                         loc=loc, keyword_loc=exec_loc, in_loc=in_loc)
+
+    @action(Seq(Loc('nonlocal'), List(Tok('ident'), ',', trailing=False)))
+    def nonlocal_stmt(self, nonlocal_loc, names):
+        """(3.0-) nonlocal_stmt: 'nonlocal' NAME (',' NAME)*"""
+        return ast.Nonlocal(names=list(map(lambda x: x.value, names)),
+                            name_locs=list(map(lambda x: x.loc, names)),
+                            keyword_loc=nonlocal_loc, loc=nonlocal_loc.join(names[-1].loc))
 
     @action(Seq(Loc('assert'), Rule('test'), Opt(SeqN(1, Tok(','), Rule('test')))))
     def assert_stmt(self, assert_loc, test, msg):
@@ -967,7 +1182,7 @@ class Parser:
 
     @action(Seq(Loc('with'), Rule('test'), Opt(Rule('with_var')), Loc(':'), Rule('suite')))
     def with_stmt__26(self, with_loc, context, with_var, colon_loc, body):
-        """(2.6) with_stmt: 'with' test [ with_var ] ':' suite"""
+        """(2.6, 3.0) with_stmt: 'with' test [ with_var ] ':' suite"""
         if with_var:
             as_loc, optional_vars = with_var
             item = ast.withitem(context_expr=context, optional_vars=optional_vars,
@@ -980,19 +1195,19 @@ class Parser:
                         loc=with_loc.join(body[-1].loc))
 
     with_var = Seq(Loc('as'), Rule('expr'))
-    """(2.6) with_var: 'as' expr"""
+    """(2.6, 3.0) with_var: 'as' expr"""
 
     @action(Seq(Loc('with'), List(Rule('with_item'), ',', trailing=False), Loc(':'),
                 Rule('suite')))
     def with_stmt__27(self, with_loc, items, colon_loc, body):
-        """(2.7) with_stmt: 'with' with_item (',' with_item)*  ':' suite"""
+        """(2.7, 3.1-) with_stmt: 'with' with_item (',' with_item)*  ':' suite"""
         return ast.With(items=items, body=body,
                         keyword_loc=with_loc, colon_loc=colon_loc,
                         loc=with_loc.join(body[-1].loc))
 
     @action(Seq(Rule('test'), Opt(Seq(Loc('as'), Rule('expr')))))
     def with_item(self, context, as_opt):
-        """(2.7) with_item: test ['as' expr]"""
+        """(2.7, 3.1-) with_item: test ['as' expr]"""
         if as_opt:
             as_loc, optional_vars = as_opt
             return ast.withitem(context_expr=context, optional_vars=optional_vars,
@@ -1001,11 +1216,17 @@ class Parser:
             return ast.withitem(context_expr=context, optional_vars=None,
                                 as_loc=None, loc=context.loc)
 
+    except_clause_1__26 = Alt(Loc('as'), Loc(','))
+    except_clause_1__30 = Loc('as')
+
     @action(Seq(Loc('except'),
                 Opt(Seq(Rule('test'),
-                        Opt(Seq(Alt(Loc('as'), Loc(',')), Rule('test')))))))
+                        Opt(Seq(Rule('except_clause_1'), Rule('test')))))))
     def except_clause(self, except_loc, exc_opt):
-        """except_clause: 'except' [test [('as' | ',') test]]"""
+        """
+        (2.6, 2.7) except_clause: 'except' [test [('as' | ',') test]]
+        (3.0-) except_clause: 'except' [test ['as' NAME]]
+        """
         type_ = name = as_loc = None
         loc = except_loc
         if exc_opt:
@@ -1027,16 +1248,16 @@ class Parser:
 
     # 2.x-only backwards compatibility start
     testlist_safe = action(List(Rule('old_test'), ',', trailing=False))(_wrap_tuple)
-    """testlist_safe: old_test [(',' old_test)+ [',']]"""
+    """(2.6, 2.7) testlist_safe: old_test [(',' old_test)+ [',']]"""
 
     old_test = Alt(Rule('or_test'), Rule('old_lambdef'))
-    """old_test: or_test | old_lambdef"""
+    """(2.6, 2.7) old_test: or_test | old_lambdef"""
 
     @action(Seq(Loc('lambda'), Opt(Rule('varargslist')), Loc(':'), Rule('old_test')))
     def old_lambdef(self, lambda_loc, args_opt, colon_loc, body):
-        """old_lambdef: 'lambda' [varargslist] ':' old_test"""
+        """(2.6, 2.7) old_lambdef: 'lambda' [varargslist] ':' old_test"""
         if args_opt is None:
-            args_opt = self._empty_arguments()
+            args_opt = self._arguments()
             args_opt.loc = colon_loc.begin()
         return ast.Lambda(args=args_opt, body=body,
                           lambda_loc=lambda_loc, colon_loc=colon_loc,
@@ -1054,6 +1275,27 @@ class Parser:
 
     test = Alt(test_1, Rule('lambdef'))
     """test: or_test ['if' or_test 'else' test] | lambdef"""
+
+    test_nocond = Alt(Rule('or_test'), Rule('lambdef_nocond'))
+    """(3.0-) test_nocond: or_test | lambdef_nocond"""
+
+    def lambdef_action(self, lambda_loc, args_opt, colon_loc, body):
+        if args_opt is None:
+            args_opt = self._arguments()
+            args_opt.loc = colon_loc.begin()
+        return ast.Lambda(args=args_opt, body=body,
+                          lambda_loc=lambda_loc, colon_loc=colon_loc,
+                          loc=lambda_loc.join(body.loc))
+
+    lambdef = action(
+        Seq(Loc('lambda'), Opt(Rule('varargslist')), Loc(':'), Rule('test'))) \
+        (lambdef_action)
+    """lambdef: 'lambda' [varargslist] ':' test"""
+
+    lambdef_nocond = action(
+        Seq(Loc('lambda'), Opt(Rule('varargslist')), Loc(':'), Rule('test_nocond'))) \
+        (lambdef_action)
+    """(3.0-) lambdef_nocond: 'lambda' [varargslist] ':' test_nocond"""
 
     @action(Seq(Rule('and_test'), Star(Seq(Loc('or'), Rule('and_test')))))
     def or_test(self, lhs, rhs):
@@ -1085,9 +1327,15 @@ class Parser:
     not_test = Alt(not_test_1, Rule('comparison'))
     """not_test: 'not' not_test | comparison"""
 
-    @action(Seq(Rule('expr'), Star(Seq(Rule('comp_op'), Rule('expr')))))
+    comparison_1__26 = Seq(Rule('expr'), Star(Seq(Rule('comp_op'), Rule('expr'))))
+    comparison_1__30 = Seq(Rule('star_expr'), Star(Seq(Rule('comp_op'), Rule('star_expr'))))
+
+    @action(Rule('comparison_1'))
     def comparison(self, lhs, rhs):
-        """comparison: expr (comp_op expr)*"""
+        """
+        (2.6, 2.7) comparison: expr (comp_op expr)*
+        (3.0-) comparison: star_expr (comp_op star_expr)*
+        """
         if len(rhs) > 0:
             return ast.Compare(left=lhs, ops=list(map(lambda x: x[0], rhs)),
                                comparators=list(map(lambda x: x[1], rhs)),
@@ -1095,12 +1343,23 @@ class Parser:
         else:
             return lhs
 
+    @action(Seq(Opt(Loc('*')), Rule('expr')))
+    def star_expr(self, star_opt, expr):
+        """(3.0-) star_expr: ['*'] expr"""
+        if star_opt:
+            return ast.Starred(value=expr,
+                               star_loc=star_opt, loc=expr.loc.join(star_opt))
+        return expr
+
     comp_op = Alt(Oper(ast.Lt, '<'), Oper(ast.Gt, '>'), Oper(ast.Eq, '=='),
                   Oper(ast.GtE, '>='), Oper(ast.LtE, '<='), Oper(ast.NotEq, '<>'),
                   Oper(ast.NotEq, '!='),
                   Oper(ast.In, 'in'), Oper(ast.NotIn, 'not', 'in'),
                   Oper(ast.IsNot, 'is', 'not'), Oper(ast.Is, 'is'))
-    """comp_op: '<'|'>'|'=='|'>='|'<='|'<>'|'!='|'in'|'not' 'in'|'is'|'is' 'not'"""
+    """
+    (2.6, 2.7) comp_op: '<'|'>'|'=='|'>='|'<='|'<>'|'!='|'in'|'not' 'in'|'is'|'is' 'not'
+    (3.0-) comp_op: '<'|'>'|'=='|'>='|'<='|'!='|'in'|'not' 'in'|'is'|'is' 'not'
+    """
 
     expr = BinOper('xor_expr', Oper(ast.BitOr, '|'))
     """expr: xor_expr ('|' xor_expr)*"""
@@ -1173,26 +1432,58 @@ class Parser:
     atom_6__26 = Rule('dictmaker')
     atom_6__27 = Rule('dictorsetmaker')
 
-    atom = Alt(BeginEnd('(', Opt(Alt(Rule('yield_expr'), Rule('testlist_comp'))), ')',
-                        empty=lambda: ast.Tuple(elts=[], ctx=None, loc=None)),
-               BeginEnd('[', Opt(Rule('listmaker')), ']',
-                        empty=lambda: ast.List(elts=[], ctx=None, loc=None)),
-               BeginEnd('{', Opt(Rule('atom_6')), '}',
-                        empty=lambda: ast.Dict(keys=[], values=[], colon_locs=[],
-                                               loc=None)),
-               BeginEnd('`', atom_1, '`'),
-               atom_2, atom_3, atom_5)
+    atom__26 = Alt(BeginEnd('(', Opt(Alt(Rule('yield_expr'), Rule('testlist_comp'))), ')',
+                            empty=lambda self: ast.Tuple(elts=[], ctx=None, loc=None)),
+                   BeginEnd('[', Opt(Rule('listmaker')), ']',
+                            empty=lambda self: ast.List(elts=[], ctx=None, loc=None)),
+                   BeginEnd('{', Opt(Rule('atom_6')), '}',
+                            empty=lambda self: ast.Dict(keys=[], values=[], colon_locs=[],
+                                                        loc=None)),
+                   BeginEnd('`', atom_1, '`'),
+                   atom_2, atom_3, atom_5)
     """
-    (2.6) atom: ('(' [yield_expr|testlist_gexp] ')' |
-                 '[' [listmaker] ']' |
-                 '{' [dictmaker] '}' |
-                 '`' testlist1 '`' |
-                 NAME | NUMBER | STRING+)
-    (2.7) atom: ('(' [yield_expr|testlist_comp] ')' |
-                 '[' [listmaker] ']' |
-                 '{' [dictorsetmaker] '}' |
-                 '`' testlist1 '`' |
-                 NAME | NUMBER | STRING+)
+    (2.6)
+    atom: ('(' [yield_expr|testlist_gexp] ')' |
+           '[' [listmaker] ']' |
+           '{' [dictmaker] '}' |
+           '`' testlist1 '`' |
+           NAME | NUMBER | STRING+)
+    (2.7)
+    atom: ('(' [yield_expr|testlist_comp] ')' |
+           '[' [listmaker] ']' |
+           '{' [dictorsetmaker] '}' |
+           '`' testlist1 '`' |
+           NAME | NUMBER | STRING+)
+    """
+
+    @action(Loc('...'))
+    def atom_7(self, loc):
+        return ast.Ellipsis(loc=loc)
+
+    @action(Alt(Tok('None'), Tok('True'), Tok('False')))
+    def atom_8(self, tok):
+        if tok.kind == 'None':
+            value = None
+        elif tok.kind == 'True':
+            value = True
+        elif tok.kind == 'False':
+            value = False
+        return ast.NameConstant(value=value, loc=tok.loc)
+
+    atom__30 = Alt(BeginEnd('(', Opt(Alt(Rule('yield_expr'), Rule('testlist_comp'))), ')',
+                            empty=lambda self: ast.Tuple(elts=[], ctx=None, loc=None)),
+                   BeginEnd('[', Opt(Rule('testlist_comp__list')), ']',
+                            empty=lambda self: ast.List(elts=[], ctx=None, loc=None)),
+                   BeginEnd('{', Opt(Rule('dictorsetmaker')), '}',
+                            empty=lambda self: ast.Dict(keys=[], values=[], colon_locs=[],
+                                                        loc=None)),
+                   atom_2, atom_3, atom_5, atom_7, atom_8)
+    """
+    (3.0-)
+    atom: ('(' [yield_expr|testlist_comp] ')' |
+           '[' [testlist_comp] ']' |
+           '{' [dictorsetmaker] '}' |
+           NAME | NUMBER | STRING+ | '...' | 'None' | 'True' | 'False')
     """
 
     def list_gen_action(self, lhs, rhs):
@@ -1235,18 +1526,21 @@ class Parser:
         (list_gen_action)
     """
     (2.6) testlist_gexp: test ( gen_for | (',' test)* [','] )
-    (2.7) testlist_comp: test ( comp_for | (',' test)* [','] )
+    (2.7-) testlist_comp: test ( comp_for | (',' test)* [','] )
     """
 
-    @action(Seq(Loc('lambda'), Opt(Rule('varargslist')), Loc(':'), Rule('test')))
-    def lambdef(self, lambda_loc, args_opt, colon_loc, body):
-        """lambdef: 'lambda' [varargslist] ':' test"""
-        if args_opt is None:
-            args_opt = self._empty_arguments()
-            args_opt.loc = colon_loc.begin()
-        return ast.Lambda(args=args_opt, body=body,
-                          lambda_loc=lambda_loc, colon_loc=colon_loc,
-                          loc=lambda_loc.join(body.loc))
+    @action(Rule('comp_for'))
+    def testlist_comp__list_1(self, compose):
+        return ast.ListComp(generators=compose([]), loc=None)
+
+    @action(List(Rule('test'), ',', trailing=True, leading=False))
+    def testlist_comp__list_2(self, elts):
+        return ast.List(elts=elts, ctx=None, loc=None)
+
+    testlist_comp__list = action(
+        Seq(Rule('test'), Alt(testlist_comp__list_1, testlist_comp__list_2))) \
+        (list_gen_action)
+    """Same grammar as testlist_comp, but different semantic action."""
 
     @action(Seq(Loc('.'), Tok('ident')))
     def trailer_1(self, dot_loc, ident_tok):
@@ -1254,13 +1548,8 @@ class Parser:
                              loc=dot_loc.join(ident_tok.loc),
                              attr_loc=ident_tok.loc, dot_loc=dot_loc)
 
-    @action(Opt(Rule('arglist')))
-    def trailer_2(self, args):
-        if args is None:
-            return self._empty_arglist()
-        return args
-
-    trailer = Alt(BeginEnd('(', trailer_2, ')'),
+    trailer = Alt(BeginEnd('(', Opt(Rule('arglist')), ')',
+                           empty=_empty_arglist),
                   BeginEnd('[', Rule('subscriptlist'), ']'),
                   trailer_1)
     """trailer: '(' [arglist] ')' | '[' subscriptlist ']' | '.' NAME"""
@@ -1306,14 +1595,24 @@ class Parser:
     def subscript_3(self, expr):
         return ast.Index(value=expr, loc=expr.loc)
 
-    subscript = Alt(subscript_1, subscript_2, subscript_3)
+    subscript__26 = Alt(subscript_1, subscript_2, subscript_3)
+    """(2.6, 2.7) subscript: '.' '.' '.' | test | [test] ':' [test] [sliceop]"""
+
+    subscript__30 = Alt(subscript_2, subscript_3)
+    """(3.0-) subscript: test | [test] ':' [test] [sliceop]"""
 
     sliceop = Seq(Loc(':'), Opt(Rule('test')))
     """sliceop: ':' [test]"""
 
-    @action(List(Rule('expr'), ',', trailing=True))
+    exprlist_1__26 = List(Rule('expr'), ',', trailing=True)
+    exprlist_1__30 = List(Rule('star_expr'), ',', trailing=True)
+
+    @action(Rule('exprlist_1'))
     def exprlist(self, exprs):
-        """exprlist: expr (',' expr)* [',']"""
+        """
+        (2.6, 2.7) exprlist: expr (',' expr)* [',']
+        (3.0-) exprlist: star_expr (',' star_expr)* [',']
+        """
         return self._wrap_tuple(exprs)
 
     @action(List(Rule('test'), ',', trailing=True))
@@ -1359,22 +1658,47 @@ class Parser:
 
     dictorsetmaker = Alt(dictorsetmaker_2, dictorsetmaker_3)
     """
-    (2.7) dictorsetmaker: ( (test ':' test (comp_for | (',' test ':' test)* [','])) |
-                            (test (comp_for | (',' test)* [','])) )
+    (2.7-)
+    dictorsetmaker: ( (test ':' test (comp_for | (',' test ':' test)* [','])) |
+                      (test (comp_for | (',' test)* [','])) )
     """
 
     @action(Seq(Loc('class'), Tok('ident'),
                 Opt(Seq(Loc('('), List(Rule('test'), ',', trailing=True), Loc(')'))),
                 Loc(':'), Rule('suite')))
-    def classdef(self, class_loc, name_tok, bases_opt, colon_loc, body):
-        """classdef: 'class' NAME ['(' [testlist] ')'] ':' suite"""
+    def classdef__26(self, class_loc, name_tok, bases_opt, colon_loc, body):
+        """(2.6, 2.7) classdef: 'class' NAME ['(' [testlist] ')'] ':' suite"""
         bases, lparen_loc, rparen_loc = [], None, None
         if bases_opt:
             lparen_loc, bases, rparen_loc = bases_opt
 
-        return ast.ClassDef(name=name_tok.value, bases=bases, body=body,
+        return ast.ClassDef(name=name_tok.value, bases=bases, keywords=[],
+                            starargs=None, kwargs=None, body=body,
                             decorator_list=[], at_locs=[],
-                            keyword_loc=class_loc, lparen_loc=lparen_loc, rparen_loc=rparen_loc,
+                            keyword_loc=class_loc, lparen_loc=lparen_loc,
+                            star_loc=None, dstar_loc=None, rparen_loc=rparen_loc,
+                            name_loc=name_tok.loc, colon_loc=colon_loc,
+                            loc=class_loc.join(body[-1].loc))
+
+    @action(Seq(Loc('class'), Tok('ident'),
+                Opt(Seq(Loc('('), Rule('arglist'), Loc(')'))),
+                Loc(':'), Rule('suite')))
+    def classdef__30(self, class_loc, name_tok, arglist_opt, colon_loc, body):
+        """(3.0) classdef: 'class' NAME ['(' [testlist] ')'] ':' suite"""
+        arglist, lparen_loc, rparen_loc = [], None, None
+        bases, keywords, starargs, kwargs = [], [], None, None
+        star_loc, dstar_loc = None, None
+        if arglist_opt:
+            lparen_loc, arglist, rparen_loc = arglist_opt
+            bases, keywords, starargs, kwargs = \
+                arglist.args, arglist.keywords, arglist.starargs, arglist.kwargs
+            star_loc, dstar_loc = arglist.star_loc, arglist.dstar_loc
+
+        return ast.ClassDef(name=name_tok.value, bases=bases, keywords=keywords,
+                            starargs=starargs, kwargs=kwargs, body=body,
+                            decorator_list=[], at_locs=[],
+                            keyword_loc=class_loc, lparen_loc=lparen_loc,
+                            star_loc=star_loc, dstar_loc=dstar_loc, rparen_loc=rparen_loc,
                             name_loc=name_tok.loc, colon_loc=colon_loc,
                             loc=class_loc.join(body[-1].loc))
 
@@ -1465,12 +1789,12 @@ class Parser:
         # This rule is reformulated to avoid exponential backtracking.
         """
         (2.6) argument: test [gen_for] | test '=' test  # Really [keyword '='] test
-        (2.7) argument: test [comp_for] | test '=' test
+        (2.7-) argument: test [comp_for] | test '=' test
         """
         return thunk(lhs)
 
     list_iter = Alt(Rule("list_for"), Rule("list_if"))
-    """list_iter: list_for | list_if"""
+    """(2.6, 2.7) list_iter: list_for | list_if"""
 
     def list_comp_for_action(self, for_loc, target, in_loc, iter, next_opt):
         def compose(comprehensions):
@@ -1499,17 +1823,17 @@ class Parser:
         Seq(Loc('for'), Rule('exprlist'),
             Loc('in'), Rule('testlist_safe'), Opt(Rule('list_iter')))) \
         (list_comp_for_action)
-    """list_for: 'for' exprlist 'in' testlist_safe [list_iter]"""
+    """(2.6, 2.7) list_for: 'for' exprlist 'in' testlist_safe [list_iter]"""
 
     list_if = action(
         Seq(Loc('if'), Rule('old_test'), Opt(Rule('list_iter')))) \
         (list_comp_if_action)
-    """list_if: 'if' old_test [list_iter]"""
+    """(2.6, 2.7) list_if: 'if' old_test [list_iter]"""
 
     comp_iter = Alt(Rule("comp_for"), Rule("comp_if"))
     """
     (2.6) gen_iter: gen_for | gen_if
-    (2.7) comp_iter: comp_for | comp_if
+    (2.7-) comp_iter: comp_for | comp_if
     """
 
     comp_for = action(
@@ -1518,15 +1842,22 @@ class Parser:
         (list_comp_for_action)
     """
     (2.6) gen_for: 'for' exprlist 'in' or_test [gen_iter]
-    (2.7) comp_for: 'for' exprlist 'in' or_test [comp_iter]
+    (2.7-) comp_for: 'for' exprlist 'in' or_test [comp_iter]
     """
 
-    comp_if = action(
+    comp_if__26 = action(
         Seq(Loc('if'), Rule('old_test'), Opt(Rule('comp_iter')))) \
         (list_comp_if_action)
     """
     (2.6) gen_if: 'if' old_test [gen_iter]
     (2.7) comp_if: 'if' old_test [comp_iter]
+    """
+
+    comp_if__30 = action(
+        Seq(Loc('if'), Rule('test_nocond'), Opt(Rule('comp_iter')))) \
+        (list_comp_if_action)
+    """
+    (3.0-) comp_if: 'if' test_nocond [comp_iter]
     """
 
     testlist1 = action(List(Rule('test'), ',', trailing=False))(_wrap_tuple)

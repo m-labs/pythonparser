@@ -94,23 +94,38 @@ class alias(AST, commonloc):
     _fields = ('name', 'asname')
     _locs = commonloc._locs + ('name_loc', 'as_loc', 'asname_loc')
 
+class arg(AST, commonloc):
+    """
+    A formal argument, e.g. in ``def f(x)`` or ``def f(x: T)``.
+
+    :ivar arg: (string) argument name
+    :ivar annotation: (node) type annotation, if any; **emitted since 3.0**
+    :ivar arg_loc: location of argument name
+    :ivar colon_loc: location of ``:``, if any; **emitted since 3.0**
+    """
+    _fields = ('arg', 'annotation')
+    _locs = commonloc._locs + ('arg_loc', 'colon_loc')
+
 class arguments(AST, beginendloc):
     """
     Function definition arguments, e.g. in ``def f(x, y=1, *z, **t)``.
 
-    :ivar args: (list of assignable node) regular formal arguments
-    :ivar vararg: (string) splat formal argument (if any), e.g. in ``*x``
-    :ivar kwarg: (string) keyword splat formal argument (if any), e.g. in ``**x``
+    :ivar args: (list of :class:`arg`) regular formal arguments
     :ivar defaults: (list of node) values of default arguments
+    :ivar vararg: (:class:`arg`) splat formal argument (if any), e.g. in ``*x``
+    :ivar kwonlyargs: (list of :class:`arg`) keyword-only (post-*) formal arguments;
+        **emitted since 3.0**
+    :ivar kw_defaults: (list of node) values of default keyword-only arguments;
+        **emitted since 3.0**
+    :ivar kwarg: (:class:`arg`) keyword splat formal argument (if any), e.g. in ``**x``
     :ivar star_loc: location of ``*``, if any
-    :ivar vararg_loc: location of splat formal argument, if any
     :ivar dstar_loc: location of ``**``, if any
-    :ivar kwarg_loc: location of keyword splat formal argument, if any
     :ivar equals_locs: locations of ``=``
+    :ivar kw_equals_locs: locations of ``=`` of default keyword-only arguments;
+        **emitted since 3.0**
     """
-    _fields = ('args', 'vararg', 'kwarg', 'defaults')
-    _locs = beginendloc._locs + ('star_loc', 'vararg_loc', 'dstar_loc',
-                                 'vararg_loc', 'kwarg_loc', 'equals_locs')
+    _fields = ('args', 'vararg', 'kwonlyargs', 'kwarg', 'defaults', 'kw_defaults')
+    _locs = beginendloc._locs + ('star_loc', 'dstar_loc', 'equals_locs', 'kw_equals_locs')
 
 class boolop(AST, commonloc):
     """
@@ -255,6 +270,8 @@ class DictComp(expr, beginendloc):
     """
     _fields = ('key', 'value', 'generators')
     _locs = beginendloc._locs + ('colon_loc',)
+class Ellipsis(expr):
+    """The ellipsis, e.g. in ``x[...]``."""
 class GeneratorExp(expr, beginendloc):
     """
     A generator expression, e.g. ``(x for x in y)``.
@@ -308,6 +325,13 @@ class Name(expr):
     :ivar id: (string) name
     """
     _fields = ('id', 'ctx')
+class NameConstant(expr):
+    """
+    A named constant, e.g. ``None``.
+
+    :ivar value: Python value, one of ``None``, ``True`` or ``False``
+    """
+    _fields = ('value',)
 class Num(expr):
     """
     An integer, floating point or complex number, e.g. ``1``, ``1.0`` or ``1.0j``.
@@ -350,6 +374,15 @@ class Str(expr, beginendloc):
     :ivar s: (string) value
     """
     _fields = ('s',)
+class Starred(expr):
+    """
+    A starred expression, e.g. ``*x`` in ``*x, y = z``.
+
+    :ivar value: (node) expression
+    :ivar star_loc: location of ``*``
+    """
+    _fields = ('value',)
+    _locs = expr._locs + ('star_loc',)
 class Subscript(expr, beginendloc):
     """
     A subscript operation, e.g. ``x[1]``.
@@ -441,8 +474,6 @@ class Sub(operator):
 
 class slice(AST, commonloc):
     """Base class for slice operations."""
-class Ellipsis(slice):
-    """The ellipsis, e.g. in ``x[...]``."""
 class ExtSlice(slice):
     """
     The multiple slice, e.g. in ``x[0:1, 2:3]``.
@@ -503,21 +534,28 @@ class Break(stmt, keywordloc):
     """The ``break`` statement."""
 class ClassDef(stmt, keywordloc):
     """
-    The ``class x(z, y):·  t`` statement.
+    The ``class x(z, y):·  t`` (2.6) or
+    ``class x(y, z=1, *t, **u):·  v`` (3.0) statement.
 
     :ivar name: (string) name
     :ivar bases: (list of node) base classes
+    :ivar keywords: (list of :class:`keyword`) keyword arguments; **emitted since 3.0**
+    :ivar starargs: (node) splat argument (if any), e.g. in ``*x``; **emitted since 3.0**
+    :ivar kwargs: (node) keyword splat argument (if any), e.g. in ``**x``; **emitted since 3.0**
     :ivar body: (list of node) body
     :ivar decorator_list: (list of node) decorators
     :ivar keyword_loc: location of ``class``
     :ivar name_loc: location of name
     :ivar lparen_loc: location of ``(``, if any
+    :ivar star_loc: location of ``*``, if any; **emitted since 3.0**
+    :ivar dstar_loc: location of ``**``, if any; **emitted since 3.0**
     :ivar rparen_loc: location of ``)``, if any
     :ivar colon_loc: location of ``:``
     :ivar at_locs: locations of decorator ``@``
     """
-    _fields = ('name', 'bases', 'body', 'decorator_list')
-    _locs = keywordloc._locs + ('name_loc', 'lparen_loc', 'rparen_loc', 'colon_loc', 'at_locs')
+    _fields = ('name', 'bases', 'keywords', 'starargs', 'kwargs', 'body', 'decorator_list')
+    _locs = keywordloc._locs + ('name_loc', 'lparen_loc', 'star_loc', 'dstar_loc', 'rparen_loc',
+                                'colon_loc', 'at_locs')
 class Continue(stmt, keywordloc):
     """The ``continue`` statement."""
 class Delete(stmt, keywordloc):
@@ -566,19 +604,21 @@ class For(stmt, keywordloc):
     _locs = keywordloc._locs + ('in_loc', 'for_colon_loc', 'else_loc', 'else_colon_loc')
 class FunctionDef(stmt, keywordloc):
     """
-    The ``def f(x):·  y`` statement.
+    The ``def f(x):·  y`` (2.6) or ``def f(x) -> t:·  y`` (2.6) statement.
 
     :ivar name: (string) name
     :ivar args: (:class:`arguments`) formal arguments
+    :ivar returns: (node) return type annotation; **emitted since 3.0**
     :ivar body: (list of node) body
     :ivar decorator_list: (list of node) decorators
     :ivar keyword_loc: location of ``def``
     :ivar name_loc: location of name
+    :ivar arrow_loc: location of ``->``, if any; **emitted since 3.0**
     :ivar colon_loc: location of ``:``, if any
     :ivar at_locs: locations of decorator ``@``
     """
-    _fields = ('name', 'args', 'body', 'decorator_list')
-    _locs = keywordloc._locs + ('name_loc', 'colon_loc', 'at_locs')
+    _fields = ('name', 'args', 'returns', 'body', 'decorator_list')
+    _locs = keywordloc._locs + ('name_loc', 'arrow_loc', 'colon_loc', 'at_locs')
 class Global(stmt, keywordloc):
     """
     The ``global x, y`` statement.
@@ -625,6 +665,17 @@ class ImportFrom(stmt, keywordloc):
     """
     _fields = ('names', 'module', 'level')
     _locs = keywordloc._locs + ('dots_loc', 'module_loc', 'import_loc', 'lparen_loc', 'rparen_loc')
+class Nonlocal(stmt, keywordloc):
+    """
+    The ``nonlocal x, y`` statement.
+
+    **Emitted since 3.0.**
+
+    :ivar names: (list of string) names
+    :ivar name_locs: locations of names
+    """
+    _fields = ('names',)
+    _locs = keywordloc._locs + ('name_locs',)
 class Pass(stmt, keywordloc):
     """The ``pass`` statement."""
 class Print(stmt, keywordloc):
@@ -642,13 +693,17 @@ class Print(stmt, keywordloc):
     _locs = keywordloc._locs + ('dest_loc',)
 class Raise(stmt, keywordloc):
     """
-    The ``raise exn, arg, traceback`` statement.
+    The ``raise exc, arg, traceback`` (2.x) or
+    or ``raise exc from cause`` (3.0) statement.
 
-    :ivar type: (node) exception type or instance
-    :ivar inst: (node) exception instance or argument list, if any
-    :ivar tback: (node) traceback, if any
+    :ivar exc: (node) exception type or instance
+    :ivar cause: (node) cause of exception, if any; **emitted since 3.0**
+    :ivar inst: (node) exception instance or argument list, if any; **emitted until 3.0**
+    :ivar tback: (node) traceback, if any; **emitted until 3.0**
+    :ivar from_loc: location of ``from``, if any; **emitted since 3.0**
     """
-    _fields = ('type', 'inst', 'tback')
+    _fields = ('exc', 'cause', 'inst', 'tback')
+    _locs = keywordloc._locs + ('from_loc',)
 class Return(stmt, keywordloc):
     """
     The ``return x`` statement.

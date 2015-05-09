@@ -2,7 +2,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import sys, pyparser.source, pyparser.lexer, pyparser.parser
 
 def parse(source, filename='<unknown>', mode='exec',
-          flags=[], version=sys.version_info[0:2]):
+          flags=[], version=None):
     """
     Parse a string into an abstract syntax tree.
     This is the replacement for the built-in :meth:`..ast.parse`.
@@ -17,11 +17,14 @@ def parse(source, filename='<unknown>', mode='exec',
     :param flags: (list of string) Future flags.
         Equivalent to ``from __future__ import <flags>``.
     :param version: (2-tuple of int) Major and minor version of Python
-        syntax to recognize.
+        syntax to recognize, ``sys.version_info[0:2]`` by default.
     :return: (:class:`ast.AST`) abstract syntax tree
     :raise: :class:`diagnostic.DiagnosticException`
         if the source code is not well-formed
     """
+    if version is None:
+        version = sys.version_info[0:2]
+
     buffer = pyparser.source.Buffer(source, filename)
 
     lexer = pyparser.lexer.Lexer(buffer, version)

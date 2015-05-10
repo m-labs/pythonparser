@@ -15,7 +15,7 @@ class ParserTestCase(unittest.TestCase):
 
     maxDiff = None
 
-    versions = [(2, 6), (2, 7), (3, 0), (3, 1)]
+    versions = [(2, 6), (2, 7), (3, 0), (3, 1), (3, 2)]
 
     def parser_for(self, code, version, interactive=False):
         code = code.replace("·", "\n")
@@ -537,18 +537,6 @@ class ParserTestCase(unittest.TestCase):
             "  ^ colon_locs.0"
             "~~~~~~ loc")
 
-    def test_dict_comp(self):
-        self.assertParsesExpr(
-            {'ty': 'DictComp', 'key': self.ast_x, 'value': self.ast_y,
-             'generators': [{'ty': 'comprehension', 'target': self.ast_z,
-                             'iter': self.ast_t, 'ifs': []}]},
-            "{x: y for z in t}",
-            "^ begin_loc"
-            "                ^ end_loc"
-            "  ^ colon_loc"
-            "~~~~~~~~~~~~~~~~~ loc",
-            only_if=lambda ver: ver >= (2, 7))
-
     def test_set(self):
         self.assertParsesExpr(
             {'ty': 'Set', 'elts': [self.ast_1]},
@@ -562,17 +550,6 @@ class ParserTestCase(unittest.TestCase):
             {'ty': 'Set', 'elts': [self.ast_1, self.ast_2]},
             "{1, 2}",
             "~~~~~~ loc",
-            only_if=lambda ver: ver >= (2, 7))
-
-    def test_set_comp(self):
-        self.assertParsesExpr(
-            {'ty': 'SetComp', 'elt': self.ast_x,
-             'generators': [{'ty': 'comprehension', 'target': self.ast_y,
-                             'iter': self.ast_z, 'ifs': []}]},
-            "{x for y in z}",
-            "^ begin_loc"
-            "             ^ end_loc"
-            "~~~~~~~~~~~~~~ loc",
             only_if=lambda ver: ver >= (2, 7))
 
     def test_repr(self):
@@ -620,6 +597,29 @@ class ParserTestCase(unittest.TestCase):
             "[x for y in z if x for t in z]",
             "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ loc")
 
+    def test_dict_comp(self):
+        self.assertParsesExpr(
+            {'ty': 'DictComp', 'key': self.ast_x, 'value': self.ast_y,
+             'generators': [{'ty': 'comprehension', 'target': self.ast_z,
+                             'iter': self.ast_t, 'ifs': []}]},
+            "{x: y for z in t}",
+            "^ begin_loc"
+            "                ^ end_loc"
+            "  ^ colon_loc"
+            "~~~~~~~~~~~~~~~~~ loc",
+            only_if=lambda ver: ver >= (2, 7))
+
+    def test_set_comp(self):
+        self.assertParsesExpr(
+            {'ty': 'SetComp', 'elt': self.ast_x,
+             'generators': [{'ty': 'comprehension', 'target': self.ast_y,
+                             'iter': self.ast_z, 'ifs': []}]},
+            "{x for y in z}",
+            "^ begin_loc"
+            "             ^ end_loc"
+            "~~~~~~~~~~~~~~ loc",
+            only_if=lambda ver: ver >= (2, 7))
+
     def test_gen_comp(self):
         self.assertParsesExpr(
             {'ty': 'GeneratorExp', 'elt': self.ast_x, 'generators': [
@@ -651,6 +651,21 @@ class ParserTestCase(unittest.TestCase):
             ]},
             "(x for y in z if x for t in z)",
             "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ loc")
+
+    def test_list_comp_starred(self):
+        self.assertParsesExpr(
+            {'ty': 'GeneratorExp', 'elt': {'ty': 'Starred', 'value': self.ast_x}, 'generators': [
+                {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y, 'ifs': []}
+            ]},
+            "(*x for y in z)",
+            only_if=lambda ver: ver >= (3, 2))
+
+        self.assertParsesExpr(
+            {'ty': 'ListComp', 'elt': {'ty': 'Starred', 'value': self.ast_x}, 'generators': [
+                {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y, 'ifs': []}
+            ]},
+            "[*x for y in z]",
+            only_if=lambda ver: ver >= (3, 2))
 
     def test_yield_expr(self):
         self.assertParsesExpr(
@@ -1388,6 +1403,12 @@ class ParserTestCase(unittest.TestCase):
             "                    ^ 0.else_colon_loc"
             "~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
 
+        self.assertParsesSuite(
+            [{'ty': 'For', 'target': {'ty': 'Starred', 'value': self.ast_x},
+              'iter': self.ast_y, 'body': [self.ast_expr_1], 'orelse': []}],
+            "for *x in y:·  1",
+            only_if=lambda ver: ver >= (3, 2))
+
     def test_try(self):
         self.assertParsesSuite(
             [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [],
@@ -1609,6 +1630,15 @@ class ParserTestCase(unittest.TestCase):
              'kwonlyargs': [], 'kw_defaults': [],
              'vararg': None, 'kwarg': None},
             "x",
+            "~ args.0.loc"
+            "~ loc",
+            validate_if=lambda: sys.version_info >= (3, 2))
+
+        self.assertParsesArgs(
+            {'ty': 'arguments', 'args': [self.ast_arg_x], 'defaults': [],
+             'kwonlyargs': [], 'kw_defaults': [],
+             'vararg': None, 'kwarg': None},
+            "x,",
             "~ args.0.loc"
             "~ loc",
             validate_if=lambda: sys.version_info >= (3, 2))

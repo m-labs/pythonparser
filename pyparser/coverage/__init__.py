@@ -19,6 +19,7 @@ def instrument():
     stmt_stack = [None]
     all_stmt_list = []
     in_square = 0
+    stmt_init = None
     for token in lex:
         if token.kind == 'from':
             token = lex.next()
@@ -29,6 +30,10 @@ def instrument():
             token = lex.next()
             if token.kind == 'ident' and token.value == 'Parser':
                 in_grammar = True
+
+        if token.kind == 'ident' and token.value == '_all_stmts':
+            lex.next() # =
+            stmt_init = lex.next().loc # {
 
         if not in_grammar:
             continue
@@ -64,11 +69,6 @@ def instrument():
             in_square -= 1
 
         if token.kind in ('def', 'if', 'elif', 'else', 'for') and in_square == 0:
-            if token.kind == 'def':
-                ident = lex.next()
-                if ident.value[0] == '_':
-                    stmt_stack.append(None)
-                    continue
             all_stmt_list.append((token.loc.begin_pos, token.loc.end_pos))
             stmt_stack.append("_all_stmts[(%d,%d)] = True\n" %
                                 (token.loc.begin_pos, token.loc.end_pos))
@@ -80,10 +80,11 @@ def instrument():
             if data is not None:
                 rewriter.insert_after(token.loc, data + " " * token.loc.column())
 
+    rewriter.insert_after(stmt_init, ', '.join(["(%d,%d): False" % x for x in all_stmt_list]))
+
     with codecs.open(os.path.join(os.path.dirname(__file__), 'parser.py'), 'w',
                      encoding='utf-8') as f:
         f.write(rewriter.rewrite().source)
-        f.write("\n_all_stmts = {%s}\n" % ', '.join(["(%d,%d): False" % x for x in all_stmt_list]))
 
 # Produce an HTML report for test coverage of parser rules.
 def report(parser, name='parser'):
@@ -92,21 +93,21 @@ def report(parser, name='parser'):
         pts = len(rule.covered)
         covered = len(list(filter(lambda x: x, rule.covered)))
         if rule.loc in all_locs:
-            pts_, covered_ = all_locs[rule.loc]
+            pts_, covered_, covered_bool_ = all_locs[rule.loc]
             if covered > covered_:
-                all_locs[rule.loc] = pts, covered
+                all_locs[rule.loc] = pts, covered, rule.covered
         else:
-            all_locs[rule.loc] = pts, covered
+            all_locs[rule.loc] = pts, covered, rule.covered
 
     rewriter = source.Rewriter(_buf)
     total_pts = 0
     total_covered = 0
     for loc in all_locs:
-        pts, covered = all_locs[loc]
+        pts, covered, covered_bool = all_locs[loc]
         if covered == 0:
             klass, hint = 'uncovered', None
         elif covered < pts:
-            klass, hint = 'partial', ', '.join(map(lambda x: "yes" if x else "no", rule.covered))
+            klass, hint = 'partial', ', '.join(map(lambda x: "yes" if x else "no", covered_bool))
         else:
             klass, hint = 'covered', None
 

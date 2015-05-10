@@ -411,13 +411,23 @@ class UnaryOp(expr):
     _fields = ('op', 'operand')
 class Yield(expr):
     """
-    A yield expression, e.g. ``(yield x)``.
+    A yield expression, e.g. ``yield x``.
 
     :ivar value: (:class:`AST`) yielded value
     :ivar yield_loc: location of ``yield``
     """
     _fields = ('value',)
     _locs = expr._locs + ('yield_loc',)
+class YieldFrom(expr):
+    """
+    A yield from expression, e.g. ``yield from x``.
+
+    :ivar value: (:class:`AST`) yielded value
+    :ivar yield_loc: location of ``yield``
+    :ivar from_loc: location of ``from``
+    """
+    _fields = ('value',)
+    _locs = expr._locs + ('yield_loc', 'from_loc')
 
 # expr_context
 #     AugLoad

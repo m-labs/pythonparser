@@ -416,8 +416,9 @@ class Parser:
             self.exprlist_1      = self.exprlist_1__26
             self.testlist_comp_1 = self.testlist_comp_1__26
             self.expr_stmt_1     = self.expr_stmt_1__26
+            self.yield_expr      = self.yield_expr__26
             return
-        elif version in ((3, 0), (3, 1), (3, 2)):
+        elif version in ((3, 0), (3, 1), (3, 2), (3, 3), (3, 4)):
             if version == (3, 0):
                 self.with_stmt       = self.with_stmt__26 # lol
             else:
@@ -446,6 +447,10 @@ class Parser:
                 self.exprlist_1      = self.exprlist_1__32
                 self.testlist_comp_1 = self.testlist_comp_1__32
                 self.expr_stmt_1     = self.expr_stmt_1__32
+            if version < (3, 3):
+                self.yield_expr      = self.yield_expr__26
+            else:
+                self.yield_expr      = self.yield_expr__33
             return
 
         raise NotImplementedError("pyparser.parser.Parser cannot parse Python %s" %
@@ -1932,8 +1937,34 @@ class Parser:
     testlist1 = action(List(Rule('test'), ',', trailing=False))(_wrap_tuple)
     """testlist1: test (',' test)*"""
 
-    @action(Seq(Loc('yield'), Rule('testlist')))
-    def yield_expr(self, stmt_loc, exprs):
-        """yield_expr: 'yield' [testlist]"""
-        return ast.Yield(value=exprs,
-                         yield_loc=stmt_loc, loc=stmt_loc.join(exprs.loc))
+    @action(Seq(Loc('yield'), Opt(Rule('testlist'))))
+    def yield_expr__26(self, yield_loc, exprs):
+        """(2.6, 2.7, 3.0, 3.1, 3.2) yield_expr: 'yield' [testlist]"""
+        if exprs is not None:
+            return ast.Yield(value=exprs,
+                             yield_loc=yield_loc, loc=yield_loc.join(exprs.loc))
+        else:
+            return ast.Yield(value=None,
+                             yield_loc=yield_loc, loc=yield_loc)
+
+    @action(Seq(Loc('yield'), Opt(Rule('yield_arg'))))
+    def yield_expr__33(self, yield_loc, arg):
+        """(3.3-) yield_expr: 'yield' [yield_arg]"""
+        if isinstance(arg, ast.YieldFrom):
+            arg.yield_loc = yield_loc
+            arg.loc = arg.loc.join(arg.yield_loc)
+            return arg
+        elif arg is not None:
+            return ast.Yield(value=arg,
+                             yield_loc=yield_loc, loc=yield_loc.join(arg.loc))
+        else:
+            return ast.Yield(value=None,
+                             yield_loc=yield_loc, loc=yield_loc)
+
+    @action(Seq(Loc('from'), Rule('test')))
+    def yield_arg_1(self, from_loc, value):
+        return ast.YieldFrom(value=value,
+                             from_loc=from_loc, loc=from_loc.join(value.loc))
+
+    yield_arg = Alt(yield_arg_1, Rule('testlist'))
+    """(3.3-) yield_arg: 'from' test | testlist"""

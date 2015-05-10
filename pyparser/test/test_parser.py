@@ -15,7 +15,7 @@ class ParserTestCase(unittest.TestCase):
 
     maxDiff = None
 
-    versions = [(2, 6), (2, 7), (3, 0), (3, 1), (3, 2)]
+    versions = [(2, 6), (2, 7), (3, 0), (3, 1), (3, 2), (3, 3), (3, 4)]
 
     def parser_for(self, code, version, interactive=False):
         code = code.replace("·", "\n")
@@ -1118,11 +1118,27 @@ class ParserTestCase(unittest.TestCase):
 
     def test_yield(self):
         self.assertParsesSuite(
+            [{'ty': 'Expr', 'value': {'ty': 'Yield', 'value': None}}],
+            "yield",
+            "~~~~~ 0.value.yield_loc"
+            "~~~~~ 0.value.loc"
+            "~~~~~ 0.loc")
+
+        self.assertParsesSuite(
             [{'ty': 'Expr', 'value': {'ty': 'Yield', 'value': self.ast_x}}],
             "yield x",
             "~~~~~ 0.value.yield_loc"
             "~~~~~~~ 0.value.loc"
             "~~~~~~~ 0.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'Expr', 'value': {'ty': 'YieldFrom', 'value': self.ast_x}}],
+            "yield from x",
+            "~~~~~ 0.value.yield_loc"
+            "      ~~~~ 0.value.from_loc"
+            "~~~~~~~~~~~~ 0.value.loc"
+            "~~~~~~~~~~~~ 0.loc",
+            only_if=lambda ver: ver >= (3, 3))
 
     def test_raise(self):
         self.assertParsesSuite(

@@ -110,7 +110,7 @@ def report(parser, name='parser'):
         else:
             klass, hint = 'covered', None
 
-        sloc = source.Range(_buf, *rule.loc)
+        sloc = source.Range(_buf, *loc)
         if hint:
             rewriter.insert_before(sloc, r"<span class='%s' title='%s'>" % (klass, hint))
         else:

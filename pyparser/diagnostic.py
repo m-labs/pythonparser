@@ -4,6 +4,7 @@ and presentation of diagnostic messages.
 """
 
 from __future__ import absolute_import, division, print_function, unicode_literals
+from functools import reduce
 
 class Diagnostic:
     """

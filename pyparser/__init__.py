@@ -1,8 +1,8 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
-import sys, pyparser.source, pyparser.lexer, pyparser.parser
+import sys, pyparser.source, pyparser.lexer, pyparser.parser, pyparser.diagnostic
 
 def parse(source, filename='<unknown>', mode='exec',
-          flags=[], version=None):
+          flags=[], version=None, engine=pyparser.diagnostic.Engine()):
     """
     Parse a string into an abstract syntax tree.
     This is the replacement for the built-in :meth:`..ast.parse`.
@@ -18,8 +18,9 @@ def parse(source, filename='<unknown>', mode='exec',
         Equivalent to ``from __future__ import <flags>``.
     :param version: (2-tuple of int) Major and minor version of Python
         syntax to recognize, ``sys.version_info[0:2]`` by default.
+    :param engine: :class:`diagnostic.Engine` Diagnostic engine
     :return: (:class:`ast.AST`) abstract syntax tree
-    :raise: :class:`diagnostic.DiagnosticException`
+    :raise: :class:`diagnostic.Error`
         if the source code is not well-formed
     """
     if version is None:
@@ -27,11 +28,11 @@ def parse(source, filename='<unknown>', mode='exec',
 
     buffer = pyparser.source.Buffer(source, filename)
 
-    lexer = pyparser.lexer.Lexer(buffer, version)
+    lexer = pyparser.lexer.Lexer(buffer, version, engine)
     if mode in ('single', 'eval'):
         lexer.interactive = True
 
-    parser = pyparser.parser.Parser(lexer, version)
+    parser = pyparser.parser.Parser(lexer, version, engine)
     parser.add_flags(flags)
 
     if mode == 'exec':

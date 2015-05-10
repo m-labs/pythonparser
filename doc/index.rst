@@ -15,14 +15,16 @@ code that consumes the ASTs. The :class:`pyparser.source.Range` class,
 instances of which are contained in the AST, allows to extract
 location information in various convenient formats.
 
-TODO: algorithms
+The :mod:`pyparser.algorithm` module contains some useful algorithms
+to manipulate ASTs.
 
 If a consumer of ASTs wishes to modify the original source without
 losing formatting, it can use :class:`pyparser.source.Rewriter`
 to insert code fragments around or instead of a known
 :class:`pyparser.source.Range`. If the AST is not expected to
 change after the modification, it is recommended to re-parse
-the result and compare it to the original AST using <ALGO>.
+the result and compare it to the original AST using
+:meth:`pyparser.algorithm.compare`.
 
 For some applications, e.g. syntax highlighting,
 :class:`pyparser.lexer.Lexer` will be able to provide a raw
@@ -70,7 +72,7 @@ stream of tokens.
       excepthandler, ExceptHandler,
       expr, BinOp, BoolOp, Call, Compare, Dict, DictComp, Ellipsis, GeneratorExp, IfExp, Lambda,
       List, ListComp, Name, Num, Repr, Set, SetComp, Str, Subscript, Tuple, UnaryOp,
-      Yield, YieldFrom
+      Yield, YieldFrom,
       keyword,
       mod, Expression, Interactive, Module,
       operator, Add, BitAnd, BitOr, BitXor, Div, FloorDiv, LShift, MatMult, Mod, Mult,
@@ -81,4 +83,11 @@ stream of tokens.
       Try, While, With,
       unaryop, Invert, Not, UAdd, USub,
       withitem
+    :show-inheritance:
+
+:mod:`pyparser.algorithm` Module
+--------------------------------
+
+.. automodule:: pyparser.algorithm
+    :members:
     :show-inheritance:

@@ -25,6 +25,9 @@
 +comparison: expr (comp_op expr)*
 +# <> isn't actually a valid comparison operator in Python. It's here for the
 +# sake of a __future__ import described in PEP 401
+@@ -74 +77 @@
+-star_expr: ['*'] expr
++star_expr: '*' expr
 @@ -104 +107 @@
 -testlist_comp: test ( comp_for | (',' test)* [','] )
 +testlist_comp: (test|star_expr) ( comp_for | (',' (test|star_expr))* [','] )

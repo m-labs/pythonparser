@@ -210,6 +210,9 @@ class Lexer:
           the string contents if *kind* is ``strdata``,
           the numeric value if *kind* is ``float``, ``int`` or ``complex``,
           the identifier if *kind* is ``ident`` and ``None`` in any other case.
+
+        :param eof_token: if true, will return a token with kind ``eof``
+            when the input is exhausted; if false, will raise ``StopIteration``.
         """
         if len(self.queue) == 0:
             self._refill(eof_token)

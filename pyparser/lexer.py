@@ -37,6 +37,8 @@ class Lexer:
         the version of Python, determining the grammar used
     :ivar source_buffer: (:class:`pyparser.source.Buffer`)
         the source buffer
+    :ivar diagnostic_engine: (:class:`pyparser.diagnostic.Engine`)
+        the diagnostic engine
     :ivar offset: (integer) character offset into ``source_buffer``
         indicating where the next token will be recognized
     :ivar interactive: (boolean) whether a completely empty line
@@ -97,9 +99,10 @@ class Lexer:
     :class:`frozenset`\s of string prefixes.
     """
 
-    def __init__(self, source_buffer, version, interactive=False):
+    def __init__(self, source_buffer, version, diagnostic_engine, interactive=False):
         self.source_buffer = source_buffer
         self.version = version
+        self.diagnostic_engine = diagnostic_engine
         self.interactive = interactive
         self.print_function = False
 
@@ -253,7 +256,7 @@ class Lexer:
                 "fatal", "unexpected {character}",
                 {"character": repr(self.source_buffer.source[self.offset]).lstrip("u")},
                 source.Range(self.source_buffer, self.offset, self.offset + 1))
-            raise diagnostic.DiagnosticException(diag)
+            self.diagnostic_engine.process(diag)
 
         # Should we emit indent/dedent?
         if self.new_line and \
@@ -279,12 +282,12 @@ class Lexer:
                     error = diagnostic.Diagnostic(
                         "fatal", "inconsistent indentation", {},
                         range, notes=[note])
-                    raise diagnostic.DiagnosticException(error)
+                    self.diagnostic_engine.process(error)
             elif whitespace != self.indent[-1][2] and self.version >= (3, 0):
                 error = diagnostic.Diagnostic(
                     "error", "inconsistent use of tabs and spaces in indentation", {},
                     range)
-                raise diagnostic.DiagnosticException(error)
+                self.diagnostic_engine.process(error)
 
         # Prepare for next token.
         self.offset = match.end(0)
@@ -348,7 +351,7 @@ class Lexer:
                 error = diagnostic.Diagnostic(
                     "error", "in Python 3, decimal literals must not start with a zero", {},
                     source.Range(self.source_buffer, tok_range.begin_pos, tok_range.begin_pos + 1))
-                raise diagnostic.DiagnosticException(error)
+                self.diagnostic_engine.process(error)
             self.queue.append(Token(tok_range, "int", int(literal, 8)))
 
         elif match.group(14) is not None: # long string literal
@@ -367,7 +370,7 @@ class Lexer:
             error = diagnostic.Diagnostic(
                 "fatal", "unterminated string", {},
                 tok_range)
-            raise diagnostic.DiagnosticException(error)
+            self.diagnostic_engine.process(error)
 
         elif match.group(21) is not None: # keywords and operators
             kwop = match.group(21)
@@ -385,7 +388,7 @@ class Lexer:
                 error = diagnostic.Diagnostic(
                     "error", "in Python 2, Unicode identifiers are not allowed", {},
                     tok_range)
-                raise diagnostic.DiagnosticException(error)
+                self.diagnostic_engine.process(error)
             self.queue.append(Token(tok_range, "ident", match.group(23)))
 
         elif match.group(24) is not None: # end-of-file
@@ -405,7 +408,7 @@ class Lexer:
                 "error", "string prefix '{prefix}' is not available in Python {major}.{minor}",
                 {'prefix': options, 'major': self.version[0], 'minor': self.version[1]},
                 begin_range)
-            raise diagnostic.DiagnosticException(error)
+            self.diagnostic_engine.process(error)
 
         self.queue.append(Token(begin_range, 'strbegin', options))
         self.queue.append(Token(data_range,
@@ -425,7 +428,7 @@ class Lexer:
             error = diagnostic.Diagnostic(
                 "error", "non-7-bit character in a byte literal", {},
                 tok_range)
-            raise diagnostic.DiagnosticException(error)
+            self.diagnostic_engine.process(error)
 
         if is_unicode or self.version >= (3, 0):
             re = self._lex_escape_unicode_re
@@ -481,7 +484,7 @@ class Lexer:
                         source.Range(self.source_buffer,
                                      range.begin_pos + match.start(0),
                                      range.begin_pos + match.end(0)))
-                    raise diagnostic.DiagnosticException(error)
+                    self.diagnostic_engine.process(error)
             elif match.group(6) is not None: # unicode-name
                 try:
                     chunks.append(unicodedata.lookup(match.group(6)))
@@ -491,7 +494,7 @@ class Lexer:
                         source.Range(self.source_buffer,
                                      range.begin_pos + match.start(0),
                                      range.begin_pos + match.end(0)))
-                    raise diagnostic.DiagnosticException(error)
+                    self.diagnostic_engine.process(error)
 
         return ''.join(chunks)
 
@@ -500,7 +503,7 @@ class Lexer:
             error = diagnostic.Diagnostic(
                 "error", "in Python 3, long integer literals were removed", {},
                 source.Range(self.source_buffer, range.end_pos - 1, range.end_pos))
-            raise diagnostic.DiagnosticException(error)
+            self.diagnostic_engine.process(error)
 
     def _match_pair_delim(self, range, kwop):
         if kwop == "(":
@@ -540,13 +543,13 @@ class Lexer:
                     "fatal", "mismatched '{delimiter}'",
                     {"delimiter": range.source()},
                     range, notes=[note])
-                raise diagnostic.DiagnosticException(error)
+                self.diagnostic_engine.process(error)
         else:
             error = diagnostic.Diagnostic(
                 "fatal", "mismatched '{delimiter}'",
                 {"delimiter": range.source()},
                 range)
-            raise diagnostic.DiagnosticException(error)
+            self.diagnostic_engine.process(error)
 
     def __iter__(self):
         return self

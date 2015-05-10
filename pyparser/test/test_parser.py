@@ -21,7 +21,9 @@ class ParserTestCase(unittest.TestCase):
         code = code.replace("·", "\n")
 
         self.source_buffer = source.Buffer(code, str(version))
-        self.lexer = lexer.Lexer(self.source_buffer, version, interactive=interactive)
+        self.engine = diagnostic.Engine()
+        self.lexer = lexer.Lexer(self.source_buffer, version, self.engine,
+                                 interactive=interactive)
 
         old_next = self.lexer.next
         def lexer_next(**args):
@@ -30,7 +32,7 @@ class ParserTestCase(unittest.TestCase):
             return token
         self.lexer.next = lexer_next
 
-        self.parser = parser.Parser(self.lexer, version)
+        self.parser = parser.Parser(self.lexer, version, self.engine)
         return self.parser
 
     def flatten_ast(self, node):
@@ -173,7 +175,7 @@ class ParserTestCase(unittest.TestCase):
             try:
                 self.parser_for(code, version).file_input()
                 self.fail("Expected a diagnostic")
-            except diagnostic.DiagnosticException as e:
+            except diagnostic.Error as e:
                 self.assertEqual(level, e.diagnostic.level)
                 self.assertEqual(reason, e.diagnostic.reason)
                 for key in args:

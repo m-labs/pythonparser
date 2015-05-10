@@ -1,5 +1,5 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
-from .. import source, lexer
+from .. import source, lexer, diagnostic
 import os, codecs
 
 _buf = None
@@ -13,7 +13,7 @@ with codecs.open(os.path.join(os.path.dirname(__file__), '..', 'parser.py'),
 # but the parser doesn't work yet at the time of writing.
 def instrument():
     rewriter = source.Rewriter(_buf)
-    lex = lexer.Lexer(_buf, (3, 4))
+    lex = lexer.Lexer(_buf, (3, 4), diagnostic.Engine())
     in_grammar = False
     paren_stack = []
     stmt_stack = [None]

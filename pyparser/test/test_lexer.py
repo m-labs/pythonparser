@@ -10,7 +10,8 @@ class LexerTestCase(unittest.TestCase):
         for version in versions:
             tokens = expected_tokens
             self.buffer = source.Buffer(input)
-            self.lexer = lexer.Lexer(self.buffer, version, **kwargs)
+            self.engine = diagnostic.Engine(all_errors_are_fatal=True)
+            self.lexer = lexer.Lexer(self.buffer, version, self.engine, **kwargs)
             for token in self.lexer:
                 if len(tokens) < 2:
                     raise Exception("stray tokens: %s" % repr(token))
@@ -25,7 +26,7 @@ class LexerTestCase(unittest.TestCase):
             try:
                 self.assertLexesVersions(input, [version], *tokens)
                 self.fail("Expected a diagnostic")
-            except diagnostic.DiagnosticException as e:
+            except diagnostic.Error as e:
                 level, message, loc = diag[0]
                 self.assertEqual(level, e.diagnostic.level)
                 self.assertEqual(message, e.diagnostic.message())

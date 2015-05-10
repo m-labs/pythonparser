@@ -87,9 +87,9 @@ class Diagnostic:
         ]
 
 
-class DiagnosticException(Exception):
+class Error(Exception):
     """
-    :class:`Exception` is an exception which carries a :class:`Diagnostic`.
+    :class:`Error` is an exception which carries a :class:`Diagnostic`.
 
     :ivar diagnostic: (:class:`Diagnostic`) the diagnostic
     """
@@ -99,3 +99,25 @@ class DiagnosticException(Exception):
     def __str__(self):
         return "\n".join(self.diagnostic.render() +
                          reduce(list.__add__, map(Diagnostic.render, self.diagnostic.notes), []))
+
+class Engine:
+    """
+    :class:`Engine` is a single point through which diagnostics from
+    lexer, parser and any AST consumer are dispatched.
+
+    :ivar all_errors_are_fatal: if true, an exception is raised not only
+        for ``fatal`` diagnostic level, but also ``error``
+    """
+    def __init__(self, all_errors_are_fatal=False):
+        self.all_errors_are_fatal = all_errors_are_fatal
+
+    def process(self, diagnostic):
+        """
+        The default implementation of :meth:`process` renders non-fatal
+        diagnostics to ``sys.stderr``, and raises fatal ones as a :class:`Error`.
+        """
+        if diagnostic.level == 'fatal' or \
+                (self.all_errors_are_fatal and diagnostic.level == 'error'):
+            raise Error(diagnostic)
+        else:
+            sys.stderr.puts("\n".join(diagnostic.render()))

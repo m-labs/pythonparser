@@ -148,7 +148,7 @@ def Expect(inner_rule, loc=None):
                 "fatal", "unexpected {actual}: expected {expected}",
                 {'actual': error_tok.kind, 'expected': expected},
                 error_tok.loc)
-            raise diagnostic.DiagnosticException(error)
+            parser.diagnostic_engine.process(error)
         return result
     return rule
 
@@ -352,8 +352,9 @@ def BeginEnd(begin_tok, inner_rule, end_tok, empty=None, loc=None):
 class Parser:
 
     # Generic LL parsing methods
-    def __init__(self, lexer, version):
+    def __init__(self, lexer, version, diagnostic_engine):
         self._init_version(version)
+        self.diagnostic_engine = diagnostic_engine
 
         self.lexer     = lexer
         self._tokens   = []
@@ -514,7 +515,7 @@ class Parser:
             else:
                 error = diagnostic.Diagnostic(
                     "fatal", "cannot assign to this expression", {}, node.loc)
-            raise diagnostic.DiagnosticException(error)
+            self.diagnostic_engine.process(error)
 
     def add_flags(self, flags):
         if 'print_function' in flags:
@@ -643,7 +644,7 @@ class Parser:
                 error = diagnostic.Diagnostic(
                     "fatal", "non-default argument follows default argument", {},
                     fparam.loc, [args.args[-1].loc.join(args.defaults[-1].loc)])
-                raise diagnostic.DiagnosticException(error)
+                self.diagnostic_engine.process(error)
 
             args.args.append(fparam)
 
@@ -735,7 +736,7 @@ class Parser:
                     error = diagnostic.Diagnostic(
                         "fatal", "non-default argument follows default argument", {},
                         fparam.loc, [args.args[-1].loc.join(args.defaults[-1].loc)])
-                    raise diagnostic.DiagnosticException(error)
+                    self.diagnostic_engine.process(error)
 
                 args.args.append(fparam)
 
@@ -852,7 +853,7 @@ class Parser:
                 error = diagnostic.Diagnostic(
                     "fatal", "illegal expression for augmented assignment", {},
                     rhs.op.loc, [lhs.loc])
-                raise diagnostic.DiagnosticException(error)
+                self.diagnostic_engine.process(error)
             else:
                 rhs.target = self._assignable(lhs)
                 rhs.loc = rhs.target.loc.join(rhs.value.loc)
@@ -1803,7 +1804,7 @@ class Parser:
                 error = diagnostic.Diagnostic(
                     "fatal", "only named arguments may follow *expression", {},
                     postarg.loc, [star_loc.join(stararg.loc)])
-                raise diagnostic.DiagnosticException(error)
+                self.diagnostic_engine.process(error)
 
         return postargs, \
                ast.Call(args=[], keywords=[], starargs=stararg, kwargs=kwarg,
@@ -1841,7 +1842,7 @@ class Parser:
                 error = diagnostic.Diagnostic(
                     "fatal", "non-keyword arg after keyword arg", {},
                     arg.loc, [call.keywords[-1].loc])
-                raise diagnostic.DiagnosticException(error)
+                self.diagnostic_engine.process(error)
             else:
                 call.args.append(arg)
         return call
@@ -1852,7 +1853,7 @@ class Parser:
             if not isinstance(lhs, ast.Name):
                 error = diagnostic.Diagnostic(
                     "fatal", "keyword must be an identifier", {}, lhs.loc)
-                raise diagnostic.DiagnosticException(error)
+                self.diagnostic_engine.process(error)
             return ast.keyword(arg=lhs.id, value=rhs,
                                loc=lhs.loc.join(rhs.loc),
                                arg_loc=lhs.loc, equals_loc=equals_loc)

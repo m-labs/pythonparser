@@ -34,6 +34,9 @@ class ParserTestCase(unittest.TestCase):
         return self.parser
 
     def flatten_ast(self, node):
+        if node is None:
+            return None
+
         # Validate locs and fields
         for attr in node.__dict__:
             if attr.endswith('loc') or attr.endswith('_locs'):
@@ -54,12 +57,16 @@ class ParserTestCase(unittest.TestCase):
             value = getattr(node, field)
             if isinstance(value, ast.AST):
                 value = self.flatten_ast(value)
-            if isinstance(value, list) and len(value) > 0 and isinstance(value[0], ast.AST):
+            if isinstance(value, list) and len(value) > 0 and \
+                    any([isinstance(x, ast.AST) for x in value]):
                 value = list(map(self.flatten_ast, value))
             flat_node[unicode(field)] = value
         return flat_node
 
     def flatten_python_ast(self, node):
+        if node is None:
+            return None
+
         flat_node = { 'ty': unicode(type(node).__name__) }
         for field in node._fields:
             if field == 'ctx':
@@ -69,7 +76,8 @@ class ParserTestCase(unittest.TestCase):
             value = getattr(node, field)
             if isinstance(value, pyast.AST):
                 value = self.flatten_python_ast(value)
-            if isinstance(value, list) and len(value) > 0 and isinstance(value[0], pyast.AST):
+            if isinstance(value, list) and len(value) > 0 and \
+                    any([isinstance(x, pyast.AST) for x in value]):
                 value = list(map(self.flatten_python_ast, value))
             flat_node[unicode(field)] = value
         return flat_node
@@ -661,14 +669,16 @@ class ParserTestCase(unittest.TestCase):
 
     def test_list_comp_starred(self):
         self.assertParsesExpr(
-            {'ty': 'GeneratorExp', 'elt': {'ty': 'Starred', 'value': self.ast_x}, 'generators': [
+            {'ty': 'GeneratorExp', 'elt': {'ty': 'Starred', 'value': self.ast_x, 'ctx': None},
+             'generators': [
                 {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y, 'ifs': []}
             ]},
             "(*x for y in z)",
             only_if=lambda ver: ver >= (3, 2))
 
         self.assertParsesExpr(
-            {'ty': 'ListComp', 'elt': {'ty': 'Starred', 'value': self.ast_x}, 'generators': [
+            {'ty': 'ListComp', 'elt': {'ty': 'Starred', 'value': self.ast_x, 'ctx': None},
+             'generators': [
                 {'ty': 'comprehension', 'iter': self.ast_z, 'target': self.ast_y, 'ifs': []}
             ]},
             "[*x for y in z]",
@@ -958,7 +968,7 @@ class ParserTestCase(unittest.TestCase):
 
     def test_assign_starred(self):
         self.assertParsesSuite(
-            [{'ty': 'Assign', 'targets': [{'ty': 'Starred', 'value': self.ast_x}],
+            [{'ty': 'Assign', 'targets': [{'ty': 'Starred', 'value': self.ast_x, 'ctx': None}],
               'value': self.ast_y}],
             "*x = y",
             "^ 0.targets.0.star_loc"
@@ -1434,14 +1444,14 @@ class ParserTestCase(unittest.TestCase):
             "~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
 
         self.assertParsesSuite(
-            [{'ty': 'For', 'target': {'ty': 'Starred', 'value': self.ast_x},
+            [{'ty': 'For', 'target': {'ty': 'Starred', 'value': self.ast_x, 'ctx': None},
               'iter': self.ast_y, 'body': [self.ast_expr_1], 'orelse': []}],
             "for *x in y:·  1",
             only_if=lambda ver: ver >= (3, 2))
 
     def test_try(self):
         self.assertParsesSuite(
-            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [],
+            [{'ty': 'Try', 'body': [self.ast_expr_1], 'orelse': [], 'finalbody': [],
               'handlers': [
                 {'ty': 'ExceptHandler', 'type': None, 'name': None,
                  'body': [self.ast_expr_2]}
@@ -1452,37 +1462,55 @@ class ParserTestCase(unittest.TestCase):
             "         ~~~~~~ 0.handlers.0.except_loc"
             "               ^ 0.handlers.0.colon_loc"
             "         ~~~~~~~~~~~ 0.handlers.0.loc"
-            "~~~~~~~~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 0))
 
         self.assertParsesSuite(
-            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [],
+            [{'ty': 'Try', 'body': [self.ast_expr_1], 'orelse': [], 'finalbody': [],
               'handlers': [
                 {'ty': 'ExceptHandler', 'type': self.ast_y, 'name': None,
                  'body': [self.ast_expr_2]}
             ]}],
-            "try:·  1·except y:·  2")
+            "try:·  1·except y:·  2",
+            validate_if=lambda: sys.version_info >= (3, 0))
 
         self.assertParsesSuite(
-            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [],
+            [{'ty': 'Try', 'body': [self.ast_expr_1], 'orelse': [], 'finalbody': [],
               'handlers': [
                 {'ty': 'ExceptHandler', 'type': self.ast_y, 'name': self.ast_t,
                  'body': [self.ast_expr_2]}
             ]}],
             "try:·  1·except y as t:·  2",
-            "                  ~~ 0.handlers.0.as_loc")
+            "                  ~~ 0.handlers.0.as_loc"
+            "                     ~ 0.handlers.0.name_loc",
+            only_if=lambda ver: ver < (3, 0),
+            validate_if=lambda: sys.version_info >= (3, 0))
 
         self.assertParsesSuite(
-            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [],
+            [{'ty': 'Try', 'body': [self.ast_expr_1], 'orelse': [], 'finalbody': [],
+              'handlers': [
+                {'ty': 'ExceptHandler', 'type': self.ast_y, 'name': 't',
+                 'body': [self.ast_expr_2]}
+            ]}],
+            "try:·  1·except y as t:·  2",
+            "                  ~~ 0.handlers.0.as_loc"
+            "                     ~ 0.handlers.0.name_loc",
+            only_if=lambda ver: ver >= (3, 0),
+            validate_if=lambda: sys.version_info >= (3, 0))
+
+        self.assertParsesSuite(
+            [{'ty': 'Try', 'body': [self.ast_expr_1], 'orelse': [], 'finalbody': [],
               'handlers': [
                 {'ty': 'ExceptHandler', 'type': self.ast_y, 'name': self.ast_t,
                  'body': [self.ast_expr_2]}
             ]}],
             "try:·  1·except y, t:·  2",
             "                 ^ 0.handlers.0.as_loc",
-            only_if=lambda ver: ver < (3, 0))
+            only_if=lambda ver: ver < (3, 0),
+            validate_if=lambda: sys.version_info >= (3, 0))
 
         self.assertParsesSuite(
-            [{'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [self.ast_expr_3],
+            [{'ty': 'Try', 'body': [self.ast_expr_1], 'orelse': [self.ast_expr_3], 'finalbody': [],
               'handlers': [
                 {'ty': 'ExceptHandler', 'type': None, 'name': None,
                  'body': [self.ast_expr_2]}
@@ -1490,34 +1518,35 @@ class ParserTestCase(unittest.TestCase):
             "try:·  1·except:·  2·else:·  3",
             "                     ~~~~ 0.else_loc"
             "                         ^ 0.else_colon_loc"
-            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 0))
 
     def test_finally(self):
         self.assertParsesSuite(
-            [{'ty': 'TryFinally', 'body': [self.ast_expr_1], 'finalbody': [self.ast_expr_2]}],
+            [{'ty': 'Try', 'body': [self.ast_expr_1], 'handlers': [], 'orelse': [],
+              'finalbody': [self.ast_expr_2]}],
             "try:·  1·finally:·  2",
             "~~~ 0.keyword_loc"
             "   ^ 0.try_colon_loc"
             "         ~~~~~~~ 0.finally_loc"
             "                ^ 0.finally_colon_loc"
-            "~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 0))
 
         self.assertParsesSuite(
-            [{'ty': 'TryFinally', 'finalbody': [self.ast_expr_3], 'body': [
-                {'ty': 'TryExcept', 'body': [self.ast_expr_1], 'orelse': [], 'handlers': [
+            [{'ty': 'Try', 'body': [self.ast_expr_1],
+              'handlers': [
                     {'ty': 'ExceptHandler', 'type': None, 'name': None,
                      'body': [self.ast_expr_2]}
-                ]}
-            ]}],
+              ], 'orelse': [], 'finalbody': [self.ast_expr_3]
+            }],
             "try:·  1·except:·  2·finally:·  3",
             "~~~ 0.keyword_loc"
             "   ^ 0.try_colon_loc"
-            "~~~ 0.body.0.keyword_loc"
-            "   ^ 0.body.0.try_colon_loc"
-            "~~~~~~~~~~~~~~~~~~~~ 0.body.0.loc"
             "                     ~~~~~~~ 0.finally_loc"
             "                            ^ 0.finally_colon_loc"
-            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 0))
 
     def test_with(self):
         self.assertParsesSuite(
@@ -1705,7 +1734,7 @@ class ParserTestCase(unittest.TestCase):
 
         self.assertParsesArgs(
             {'ty': 'arguments', 'args': [], 'defaults': [],
-             'kwonlyargs': [self.ast_arg_z], 'kw_defaults': [],
+             'kwonlyargs': [self.ast_arg_z], 'kw_defaults': [None],
              'vararg': self.ast_arg_y, 'kwarg': None},
             "*y, z",
             "~~~~~ loc",
@@ -1714,7 +1743,7 @@ class ParserTestCase(unittest.TestCase):
 
         self.assertParsesArgs(
             {'ty': 'arguments', 'args': [], 'defaults': [],
-             'kwonlyargs': [self.ast_arg_z, self.ast_arg_t], 'kw_defaults': [self.ast_1],
+             'kwonlyargs': [self.ast_arg_z, self.ast_arg_t], 'kw_defaults': [None, self.ast_1],
              'vararg': self.ast_arg_y, 'kwarg': None},
             "*y, z, t=1",
             "~~~~~~~~~~ loc",

@@ -17,6 +17,8 @@ of the native :mod:`..ast` module of the latest supported Python version.
 In particular this affects:
 
     * :class:`With`: on 2.6-2.7 it uses the 3.0 format.
+    * :class:`TryExcept` and :class:`TryFinally`: on 2.6-2.7 they're replaced with
+      :class:`Try` from 3.0.
     * :class:`arguments`: on 2.6-3.1 it uses the 3.2 format, with dedicated
       :class:`arg` in ``vararg`` and ``kwarg`` slots.
 """
@@ -188,14 +190,16 @@ class ExceptHandler(excepthandler):
     An exception handler, e.g. ``except x as y:·  z``.
 
     :ivar type: (:class:`AST`) type of handled exception, if any
-    :ivar name: (assignable :class:`AST`) variable bound to exception, if any
+    :ivar name: (assignable :class:`AST` **until 3.0**, string **since 3.0**)
+        variable bound to exception, if any
     :ivar body: (list of :class:`AST`) code to execute when exception is caught
     :ivar except_loc: location of ``except``
     :ivar as_loc: location of ``as``, if any
+    :ivar name_loc: location of variable name
     :ivar colon_loc: location of ``:``
     """
     _fields = ('type', 'name', 'body')
-    _locs = excepthandler._locs + ('except_loc', 'as_loc', 'colon_loc')
+    _locs = excepthandler._locs + ('except_loc', 'as_loc', 'name_loc', 'colon_loc')
 
 class expr(AST, commonloc):
     """Base class for expression nodes."""
@@ -384,7 +388,7 @@ class Starred(expr):
     :ivar value: (:class:`AST`) expression
     :ivar star_loc: location of ``*``
     """
-    _fields = ('value',)
+    _fields = ('value', 'ctx')
     _locs = expr._locs + ('star_loc',)
 class Subscript(expr, beginendloc):
     """
@@ -728,37 +732,25 @@ class Return(stmt, keywordloc):
     :ivar value: (:class:`AST`) return value, if any
     """
     _fields = ('value',)
-class TryExcept(stmt, keywordloc):
+class Try(stmt, keywordloc):
     """
-    The ``try:·  x·except y:·  z·else:·  t`` statement.
-
-    **Emitted until 3.0.**
+    The ``try:·  x·except y:·  z·else:·  t`` or
+    ``try:·  x·finally:·  y`` statement.
 
     :ivar body: (list of :class:`AST`) code to try
     :ivar handlers: (list of :class:`ExceptHandler`) exception handlers
     :ivar orelse: (list of :class:`AST`) code if no exception
+    :ivar finalbody: (list of :class:`AST`) code to finalize
     :ivar keyword_loc: location of ``try``
     :ivar try_colon_loc: location of ``:`` after ``try``
     :ivar else_loc: location of ``else``
     :ivar else_colon_loc: location of ``:`` after ``else``
-    """
-    _fields = ('body', 'handlers', 'orelse')
-    _locs = keywordloc._locs + ('try_colon_loc', 'else_loc', 'else_colon_loc',)
-class TryFinally(stmt, keywordloc):
-    """
-    The ``try:·  x·finally:·  y`` statement.
-
-    **Emitted until 3.0.**
-
-    :ivar body: (list of :class:`AST`) code to try
-    :ivar finalbody: (list of :class:`AST`) code to finalize
-    :ivar keyword_loc: location of ``try``
-    :ivar try_colon_loc: location of ``:`` after ``try``
     :ivar finally_loc: location of ``finally``
     :ivar finally_colon_loc: location of ``:`` after ``finally``
     """
-    _fields = ('body', 'finalbody')
-    _locs = keywordloc._locs + ('try_colon_loc', 'finally_loc', 'finally_colon_loc',)
+    _fields = ('body', 'handlers', 'orelse', 'finalbody')
+    _locs = keywordloc._locs + ('try_colon_loc', 'else_loc', 'else_colon_loc',
+                                'finally_loc', 'finally_colon_loc',)
 class While(stmt, keywordloc):
     """
     The ``while x:·  y·else:·  z`` statement.

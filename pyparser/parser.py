@@ -696,6 +696,8 @@ class Parser:
                     equals_loc, default = default_opt
                     kw_equals_locs.append(equals_loc)
                     kw_defaults.append(default)
+                else:
+                    kw_defaults.append(None)
                 kwonlyargs.append(fparam)
             if any(kw_defaults):
                 loc = loc.join(kw_defaults[-1].loc)
@@ -1205,22 +1207,22 @@ class Parser:
             else_loc, else_colon_loc, orelse = else_opt
             loc = orelse[-1].loc
 
-        stmt = ast.TryExcept(body=None, handlers=handlers, orelse=orelse,
-                             else_loc=else_loc, else_colon_loc=else_colon_loc,
-                             loc=loc)
+        finally_loc, finally_colon_loc, finalbody = None, None, []
         if finally_opt:
             finally_loc, finally_colon_loc, finalbody = finally_opt
-            return ast.TryFinally(body=[stmt], finalbody=finalbody,
-                                  finally_loc=finally_loc, finally_colon_loc=finally_colon_loc,
-                                  loc=finalbody[-1].loc)
-        else:
-            return stmt
+            loc = finalbody[-1].loc
+        stmt = ast.Try(body=None, handlers=handlers, orelse=orelse, finalbody=finalbody,
+                       else_loc=else_loc, else_colon_loc=else_colon_loc,
+                       finally_loc=finally_loc, finally_colon_loc=finally_colon_loc,
+                       loc=loc)
+        return stmt
 
     @action(Seq(Loc('finally'), Loc(':'), Rule('suite')))
     def try_stmt_2(self, finally_loc, finally_colon_loc, finalbody):
-        return ast.TryFinally(body=None, finalbody=finalbody,
-                              finally_loc=finally_loc, finally_colon_loc=finally_colon_loc,
-                              loc=finalbody[-1].loc)
+        return ast.Try(body=None, handlers=[], orelse=[], finalbody=finalbody,
+                       else_loc=None, else_colon_loc=None,
+                       finally_loc=finally_loc, finally_colon_loc=finally_colon_loc,
+                       loc=finalbody[-1].loc)
 
     @action(Seq(Loc('try'), Loc(':'), Rule('suite'), Alt(try_stmt_1, try_stmt_2)))
     def try_stmt(self, try_loc, try_colon_loc, body, stmt):
@@ -1231,13 +1233,8 @@ class Parser:
                     ['finally' ':' suite] |
                     'finally' ':' suite))
         """
-        stmt.keyword_loc, stmt.try_colon_loc = try_loc, try_colon_loc
-        if stmt.body is None: # try..finally or try..except
-            stmt.body = body
-        else: # try..except..finally
-            stmt.body[0].keyword_loc, stmt.body[0].try_colon_loc, stmt.body[0].body = \
-                try_loc, try_colon_loc, body
-            stmt.body[0].loc = stmt.body[0].loc.join(try_loc)
+        stmt.keyword_loc, stmt.try_colon_loc, stmt.body = \
+            try_loc, try_colon_loc, body
         stmt.loc = stmt.loc.join(try_loc)
         return stmt
 
@@ -1277,27 +1274,39 @@ class Parser:
             return ast.withitem(context_expr=context, optional_vars=None,
                                 as_loc=None, loc=context.loc)
 
-    except_clause_1__26 = Alt(Loc('as'), Loc(','))
-    except_clause_1__30 = Loc('as')
+    @action(Seq(Alt(Loc('as'), Loc(',')), Rule('test')))
+    def except_clause_1__26(self, as_loc, name):
+        return as_loc, None, name
+
+    @action(Seq(Loc('as'), Tok('ident')))
+    def except_clause_1__30(self, as_loc, name):
+        return as_loc, name, None
 
     @action(Seq(Loc('except'),
                 Opt(Seq(Rule('test'),
-                        Opt(Seq(Rule('except_clause_1'), Rule('test')))))))
+                        Opt(Rule('except_clause_1'))))))
     def except_clause(self, except_loc, exc_opt):
         """
         (2.6, 2.7) except_clause: 'except' [test [('as' | ',') test]]
         (3.0-) except_clause: 'except' [test ['as' NAME]]
         """
-        type_ = name = as_loc = None
+        type_ = name = as_loc = name_loc = None
         loc = except_loc
         if exc_opt:
             type_, name_opt = exc_opt
             loc = loc.join(type_.loc)
             if name_opt:
-                as_loc, name = name_opt
-                loc = loc.join(name.loc)
+                as_loc, name_tok, name_node = name_opt
+                if name_tok:
+                    name = name_tok.value
+                    name_loc = name_tok.loc
+                else:
+                    name = name_node
+                    name_loc = name_node.loc
+                loc = loc.join(name_loc)
         return ast.ExceptHandler(type=type_, name=name,
-                                 except_loc=except_loc, as_loc=as_loc, loc=loc)
+                                 except_loc=except_loc, as_loc=as_loc, name_loc=name_loc,
+                                 loc=loc)
 
     @action(Plus(Rule('stmt')))
     def suite_1(self, stmts):
@@ -1410,14 +1419,14 @@ class Parser:
     def star_expr__30(self, star_opt, expr):
         """(3.0, 3.1) star_expr: ['*'] expr"""
         if star_opt:
-            return ast.Starred(value=expr,
+            return ast.Starred(value=expr, ctx=None,
                                star_loc=star_opt, loc=expr.loc.join(star_opt))
         return expr
 
     @action(Seq(Loc('*'), Rule('expr')))
     def star_expr__32(self, star_loc, expr):
         """(3.0-) star_expr: '*' expr"""
-        return ast.Starred(value=expr,
+        return ast.Starred(value=expr, ctx=None,
                            star_loc=star_loc, loc=expr.loc.join(star_loc))
 
     comp_op = Alt(Oper(ast.Lt, '<'), Oper(ast.Gt, '>'), Oper(ast.Eq, '=='),

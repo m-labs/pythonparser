@@ -78,7 +78,7 @@ stream of tokens.
       slice, ExtSlice, Index, Slice,
       stmt, Assert, Assign, AugAssign, Break, ClassDef, Continue, Delete, Exec, Expr, For,
       FunctionDef, Global, If, Import, ImportFrom, Nonlocal, Pass, Print, Raise, Return,
-      TryExcept, TryFinally, While, With,
+      Try, While, With,
       unaryop, Invert, Not, UAdd, USub,
       withitem
     :show-inheritance:

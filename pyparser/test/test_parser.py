@@ -15,7 +15,7 @@ class ParserTestCase(unittest.TestCase):
 
     maxDiff = None
 
-    versions = [(2, 6), (2, 7), (3, 0), (3, 1), (3, 2), (3, 3), (3, 4)]
+    versions = [(2, 6), (2, 7), (3, 0), (3, 1), (3, 2), (3, 3), (3, 4), (3, 5)]
 
     def parser_for(self, code, version, interactive=False):
         code = code.replace("·", "\n")
@@ -298,6 +298,13 @@ class ParserTestCase(unittest.TestCase):
             "1 * 1",
             "~~~~~ loc"
             "  ^ op.loc")
+
+        self.assertParsesExpr(
+            {'ty': 'BinOp', 'op': {'ty': 'MatMult'}, 'left': self.ast_x, 'right': self.ast_x},
+            "x @ x",
+            "~~~~~ loc"
+            "  ^ op.loc",
+            only_if=lambda ver: ver >= (3, 5))
 
         self.assertParsesExpr(
             {'ty': 'BinOp', 'op': {'ty': 'Div'}, 'left': self.ast_1, 'right': self.ast_1},
@@ -977,6 +984,13 @@ class ParserTestCase(unittest.TestCase):
             "x *= 1",
             "~~~~~~ 0.loc"
             "  ~~ 0.op.loc")
+
+        self.assertParsesSuite(
+            [{'ty': 'AugAssign', 'op': {'ty': 'MatMult'}, 'target': self.ast_x, 'value': self.ast_y}],
+            "x @= y",
+            "~~~~~~ 0.loc"
+            "  ~~ 0.op.loc",
+            only_if=lambda ver: ver >= (3, 5))
 
         self.assertParsesSuite(
             [{'ty': 'AugAssign', 'op': {'ty': 'Div'}, 'target': self.ast_x, 'value': self.ast_1}],

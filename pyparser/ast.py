@@ -474,6 +474,8 @@ class FloorDiv(operator):
     """The ``\\\\`` operator."""
 class LShift(operator):
     """The ``<<`` operator."""
+class MatMult(operator):
+    """The ``@`` operator."""
 class Mod(operator):
     """The ``%`` operator."""
 class Mult(operator):

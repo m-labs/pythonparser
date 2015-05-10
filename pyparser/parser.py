@@ -418,7 +418,7 @@ class Parser:
             self.expr_stmt_1     = self.expr_stmt_1__26
             self.yield_expr      = self.yield_expr__26
             return
-        elif version in ((3, 0), (3, 1), (3, 2), (3, 3), (3, 4)):
+        elif version in ((3, 0), (3, 1), (3, 2), (3, 3), (3, 4), (3, 5)):
             if version == (3, 0):
                 self.with_stmt       = self.with_stmt__26 # lol
             else:
@@ -867,10 +867,11 @@ class Parser:
         (_wrap_tuple)
     """(3.2-) testlist_star_expr: (test|star_expr) (',' (test|star_expr))* [',']"""
 
-    augassign = Alt(Oper(ast.Add, '+='), Oper(ast.Sub, '-='), Oper(ast.Mult, '*='),
-                    Oper(ast.Div, '/='), Oper(ast.Mod, '%='), Oper(ast.BitAnd, '&='),
-                    Oper(ast.BitOr, '|='), Oper(ast.BitXor, '^='), Oper(ast.LShift, '<<='),
-                    Oper(ast.RShift, '>>='), Oper(ast.Pow, '**='), Oper(ast.FloorDiv, '//='))
+    augassign = Alt(Oper(ast.Add, '+='), Oper(ast.Sub, '-='), Oper(ast.MatMult, '@='),
+                    Oper(ast.Mult, '*='), Oper(ast.Div, '/='), Oper(ast.Mod, '%='),
+                    Oper(ast.BitAnd, '&='), Oper(ast.BitOr, '|='), Oper(ast.BitXor, '^='),
+                    Oper(ast.LShift, '<<='), Oper(ast.RShift, '>>='),
+                    Oper(ast.Pow, '**='), Oper(ast.FloorDiv, '//='))
     """augassign: ('+=' | '-=' | '*=' | '/=' | '%=' | '&=' | '|=' | '^=' |
                    '<<=' | '>>=' | '**=' | '//=')"""
 
@@ -1444,8 +1445,9 @@ class Parser:
     arith_expr = BinOper('term', Alt(Oper(ast.Add, '+'), Oper(ast.Sub, '-')))
     """arith_expr: term (('+'|'-') term)*"""
 
-    term = BinOper('factor', Alt(Oper(ast.Mult, '*'), Oper(ast.Div, '/'),
-                                 Oper(ast.Mod, '%'), Oper(ast.FloorDiv, '//')))
+    term = BinOper('factor', Alt(Oper(ast.Mult, '*'), Oper(ast.MatMult, '@'),
+                                 Oper(ast.Div, '/'), Oper(ast.Mod, '%'),
+                                 Oper(ast.FloorDiv, '//')))
     """term: factor (('*'|'/'|'%'|'//') factor)*"""
 
     @action(Seq(Alt(Oper(ast.UAdd, '+'), Oper(ast.USub, '-'), Oper(ast.Invert, '~')),

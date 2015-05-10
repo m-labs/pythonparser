@@ -2,7 +2,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import sys, pyparser.source, pyparser.lexer, pyparser.parser, pyparser.diagnostic
 
 def parse(source, filename='<unknown>', mode='exec',
-          flags=[], version=None, engine=pyparser.diagnostic.Engine()):
+          flags=[], version=None, engine=None):
     """
     Parse a string into an abstract syntax tree.
     This is the replacement for the built-in :meth:`..ast.parse`.
@@ -18,13 +18,17 @@ def parse(source, filename='<unknown>', mode='exec',
         Equivalent to ``from __future__ import <flags>``.
     :param version: (2-tuple of int) Major and minor version of Python
         syntax to recognize, ``sys.version_info[0:2]`` by default.
-    :param engine: :class:`diagnostic.Engine` Diagnostic engine
-    :return: (:class:`ast.AST`) abstract syntax tree
+    :param engine: (:class:`diagnostic.Engine`) Diagnostic engine,
+        a fresh one is created by default
+    :return: (:class:`ast.AST`) Abstract syntax tree
     :raise: :class:`diagnostic.Error`
         if the source code is not well-formed
     """
     if version is None:
         version = sys.version_info[0:2]
+
+    if engine is None:
+        engine = pyparser.diagnostic.Engine()
 
     buffer = pyparser.source.Buffer(source, filename)
 

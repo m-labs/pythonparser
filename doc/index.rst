@@ -30,6 +30,8 @@ For some applications, e.g. syntax highlighting,
 :class:`pyparser.lexer.Lexer` will be able to provide a raw
 stream of tokens.
 
+PyParser is licensed under 3-clause BSD.
+
 :mod:`pyparser` Module
 ----------------------
 

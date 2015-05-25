@@ -1,68 +1,68 @@
-PyParser documentation
-======================
+PythonParser documentation
+==========================
 
-PyParser is a Python parser written specifically for use in tooling.
+PythonParser is a Python parser written specifically for use in tooling.
 It parses source code into an AST that is a superset of Python's
 built-in :mod:`ast` module, but returns precise location information
 for every token.
 
-The most useful APIs of PyParser are :meth:`pyparser.parse`,
-which parses the source, :mod:`pyparser.ast`, which provides access
+The most useful APIs of PyParser are :meth:`pythonparser.parse`,
+which parses the source, :mod:`pythonparser.ast`, which provides access
 to the semantic and location information in the AST, and
-:mod:`pyparser.diagnostic.Engine`, which provides a unified way
+:mod:`pythonparser.diagnostic.Engine`, which provides a unified way
 to report errors and warnings both to PyParser itself and to any
-code that consumes the ASTs. The :class:`pyparser.source.Range` class,
+code that consumes the ASTs. The :class:`pythonparser.source.Range` class,
 instances of which are contained in the AST, allows to extract
 location information in various convenient formats.
 
-The :mod:`pyparser.algorithm` module contains some useful algorithms
+The :mod:`pythonparser.algorithm` module contains some useful algorithms
 to manipulate ASTs.
 
 If a consumer of ASTs wishes to modify the original source without
-losing formatting, it can use :class:`pyparser.source.Rewriter`
+losing formatting, it can use :class:`pythonparser.source.Rewriter`
 to insert code fragments around or instead of a known
-:class:`pyparser.source.Range`. If the AST is not expected to
+:class:`pythonparser.source.Range`. If the AST is not expected to
 change after the modification, it is recommended to re-parse
 the result and compare it to the original AST using
-:meth:`pyparser.algorithm.compare`.
+:meth:`pythonparser.algorithm.compare`.
 
 For some applications, e.g. syntax highlighting,
-:class:`pyparser.lexer.Lexer` will be able to provide a raw
+:class:`pythonparser.lexer.Lexer` will be able to provide a raw
 stream of tokens.
 
 PyParser is licensed under 3-clause BSD.
 
-:mod:`pyparser` Module
-----------------------
-
-.. automodule:: pyparser
-    :members:
-
-:mod:`pyparser.source` Module
------------------------------
-
-.. automodule:: pyparser.source
-    :members:
-    :show-inheritance:
-
-:mod:`pyparser.diagnostic` Module
----------------------------------
-
-.. automodule:: pyparser.diagnostic
-    :members:
-    :show-inheritance:
-
-:mod:`pyparser.lexer` Module
-----------------------------
-
-.. automodule:: pyparser.lexer
-    :members:
-    :show-inheritance:
-
-:mod:`pyparser.ast` Module
+:mod:`pythonparser` Module
 --------------------------
 
-.. automodule:: pyparser.ast
+.. automodule:: pythonparser
+    :members:
+
+:mod:`pythonparser.source` Module
+---------------------------------
+
+.. automodule:: pythonparser.source
+    :members:
+    :show-inheritance:
+
+:mod:`pythonparser.diagnostic` Module
+-------------------------------------
+
+.. automodule:: pythonparser.diagnostic
+    :members:
+    :show-inheritance:
+
+:mod:`pythonparser.lexer` Module
+--------------------------------
+
+.. automodule:: pythonparser.lexer
+    :members:
+    :show-inheritance:
+
+:mod:`pythonparser.ast` Module
+------------------------------
+
+.. automodule:: pythonparser.ast
     :members: commonloc, beginendloc, keywordloc,
       AST,
       alias,
@@ -87,9 +87,9 @@ PyParser is licensed under 3-clause BSD.
       withitem
     :show-inheritance:
 
-:mod:`pyparser.algorithm` Module
---------------------------------
+:mod:`pythonparser.algorithm` Module
+------------------------------------
 
-.. automodule:: pyparser.algorithm
+.. automodule:: pythonparser.algorithm
     :members:
     :show-inheritance:

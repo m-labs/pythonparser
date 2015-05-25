@@ -14,9 +14,9 @@ class Diagnostic:
     :ivar level: (one of ``LEVELS``) severity level
     :ivar reason: (format string) diagnostic message
     :ivar arguments: (dictionary) substitutions for ``reason``
-    :ivar location: (:class:`pyparser.source.Range`) most specific
+    :ivar location: (:class:`pythonparser.source.Range`) most specific
         location of the problem
-    :ivar highlights: (list of :class:`pyparser.source.Range`)
+    :ivar highlights: (list of :class:`pythonparser.source.Range`)
         secondary locations related to the problem that are
         likely to be on the same line
     :ivar notes: (list of :class:`Diagnostic`)

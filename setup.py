@@ -9,23 +9,23 @@ class PushDocCommand(Command):
     def finalize_options(self):
         pass
     def run(self):
-        os.system('rsync -avz doc/_build/html/ shell.serverraum.org:~/web/m-labs.hk/pyparser')
+        os.system('rsync -avz doc/_build/html/ shell.serverraum.org:~/web/m-labs.hk/pythonparser')
 
 setup(
-    name="pyparser",
+    name="pythonparser",
     version="0.0+dev",
     author="whitequark",
     author_email="whitequark@whitequark.org",
-    url="http://m-labs.hk/pyparser",
+    url="http://m-labs.hk/pythonparser",
     description="A Python parser intended for use in tooling",
-    long_description=open("README.rst").read(),
+    long_description=open("README.md").read(),
     license="BSD",
     install_requires=['regex'],
     extras_require={},
     dependency_links=[],
     packages=find_packages(exclude=['tests*']),
     namespace_packages=[],
-    test_suite="pyparser.test",
+    test_suite="pythonparser.test",
     package_data={},
     ext_modules=[],
     entry_points={},

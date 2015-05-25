@@ -1,5 +1,5 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
-import sys, pyparser.source, pyparser.lexer, pyparser.parser, pyparser.diagnostic
+import sys, pythonparser.source, pythonparser.lexer, pythonparser.parser, pythonparser.diagnostic
 
 def parse(source, filename='<unknown>', mode='exec',
           flags=[], version=None, engine=None):
@@ -28,15 +28,15 @@ def parse(source, filename='<unknown>', mode='exec',
         version = sys.version_info[0:2]
 
     if engine is None:
-        engine = pyparser.diagnostic.Engine()
+        engine = pythonparser.diagnostic.Engine()
 
-    buffer = pyparser.source.Buffer(source, filename)
+    buffer = pythonparser.source.Buffer(source, filename)
 
-    lexer = pyparser.lexer.Lexer(buffer, version, engine)
+    lexer = pythonparser.lexer.Lexer(buffer, version, engine)
     if mode in ('single', 'eval'):
         lexer.interactive = True
 
-    parser = pyparser.parser.Parser(lexer, version, engine)
+    parser = pythonparser.parser.Parser(lexer, version, engine)
     parser.add_flags(flags)
 
     if mode == 'exec':

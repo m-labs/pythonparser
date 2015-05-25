@@ -454,7 +454,7 @@ class Parser:
                 self.yield_expr      = self.yield_expr__33
             return
 
-        raise NotImplementedError("pyparser.parser.Parser cannot parse Python %s" %
+        raise NotImplementedError("pythonparser.parser.Parser cannot parse Python %s" %
                                   str(version))
 
     def _arguments(self, args=None, defaults=None, kwonlyargs=None, kw_defaults=None,

@@ -16,7 +16,7 @@ class Token:
     The :class:`Token` encapsulates a single lexer token and its location
     in the source code.
 
-    :ivar loc: (:class:`pyparser.source.Range`) token location
+    :ivar loc: (:class:`pythonparser.source.Range`) token location
     :ivar kind: (string) token kind
     :ivar value: token value; None or a kind-specific class
     """
@@ -29,15 +29,15 @@ class Token:
 class Lexer:
     """
     The :class:`Lexer` class extracts tokens and comments from
-    a :class:`pyparser.source.Buffer`.
+    a :class:`pythonparser.source.Buffer`.
 
     :class:`Lexer` is an iterable.
 
     :ivar version: (tuple of (*major*, *minor*))
         the version of Python, determining the grammar used
-    :ivar source_buffer: (:class:`pyparser.source.Buffer`)
+    :ivar source_buffer: (:class:`pythonparser.source.Buffer`)
         the source buffer
-    :ivar diagnostic_engine: (:class:`pyparser.diagnostic.Engine`)
+    :ivar diagnostic_engine: (:class:`pythonparser.diagnostic.Engine`)
         the diagnostic engine
     :ivar offset: (integer) character offset into ``source_buffer``
         indicating where the next token will be recognized
@@ -118,7 +118,7 @@ class Lexer:
         try:
             reserved = self._reserved[version]
         except KeyError:
-            raise NotImplementedError("pyparser.lexer.Lexer cannot lex Python %s" % str(version))
+            raise NotImplementedError("pythonparser.lexer.Lexer cannot lex Python %s" % str(version))
 
         # Sort for the regexp to obey longest-match rule.
         re_reserved  = sorted(reserved, reverse=True, key=len)
@@ -207,7 +207,7 @@ class Lexer:
         Returns token at ``offset`` as a :class:`Token` and advances ``offset``
         to point past the end of the token, where the token has:
 
-        - *range* which is a :class:`pyparser.source.Range` that includes
+        - *range* which is a :class:`pythonparser.source.Range` that includes
           the token but not surrounding whitespace,
         - *kind* which is a string containing one of Python keywords or operators,
           ``newline``, ``float``, ``int``, ``complex``, ``strbegin``,

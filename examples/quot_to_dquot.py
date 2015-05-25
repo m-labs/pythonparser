@@ -1,5 +1,5 @@
 import sys, re
-from pyparser import source, lexer
+from pythonparser import source, lexer
 
 buf = None
 with open(sys.argv[1]) as f:

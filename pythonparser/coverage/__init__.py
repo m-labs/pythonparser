@@ -175,6 +175,6 @@ def report(parser, name='parser'):
            file=os.path.basename(_buf.name),
            content=content))
 
-# Create the instrumented parser when `import pyparser.coverage.parser`
+# Create the instrumented parser when `import pythonparser.coverage.parser`
 # is invoked. Not intended for any use except running the internal testsuite.
 instrument()

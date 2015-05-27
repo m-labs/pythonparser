@@ -40,6 +40,9 @@ class commonloc(object):
 
     _locs = ('loc',)
 
+    def _reprfields(self):
+        return self._fields + self._locs
+
     def __repr__(self):
         def value(name):
             try:
@@ -51,7 +54,7 @@ class commonloc(object):
             except:
                 return "(!!!MISSING!!!)"
         fields = ', '.join(map(lambda name: "%s=%s" % (name, value(name)),
-                           self._fields + self._locs))
+                           self._reprfields()))
         return "%s(%s)" % (self.__class__.__name__, fields)
 
 class keywordloc(commonloc):
@@ -73,7 +76,7 @@ class beginendloc(commonloc):
 
 # AST nodes
 
-class AST:
+class AST(object):
     """
     An ancestor of all nodes.
 

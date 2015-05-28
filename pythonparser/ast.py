@@ -176,7 +176,7 @@ class comprehension(AST, commonloc):
     """
     A single ``for`` list comprehension clause.
 
-    :ivar target: (:class:`AST`) the variable(s) bound in comprehension body
+    :ivar target: (assignable :class:`AST`) the variable(s) bound in comprehension body
     :ivar iter: (:class:`AST`) the expression being iterated
     :ivar ifs: (list of :class:`AST`) the ``if`` clauses
     :ivar for_loc: location of the ``for`` keyword
@@ -550,7 +550,7 @@ class AugAssign(stmt):
     The operator-assignment statement, e.g. ``+=``.
 
     :ivar target: (assignable :class:`AST`) left-hand side
-    :ivar op: (:class`) operator
+    :ivar op: (:class:`operator`) operator
     :ivar value: (:class:`AST`) right-hand side
     """
     _fields = ('target', 'op', 'value')

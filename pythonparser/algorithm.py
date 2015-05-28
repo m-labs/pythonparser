@@ -8,36 +8,70 @@ from . import ast
 
 class Visitor:
     """
-    A node visitor base class that does a pre-order traversal
+    A node visitor base class that does a traversal
     of the abstract syntax tree.
 
-    This class is meant to be subclassed, with the subclass adding visitor
-    methods.
+    This class is meant to be subclassed, with the subclass adding
+    visitor methods. The visitor method should call ``self.generic_visit(node)``
+    to continue the traversal; this allows to perform arbitrary
+    actions both before and after traversing the children of a node.
 
-    The visitor functions for the nodes are ``'visit_'`` +
+    The visitor methods for the nodes are ``'visit_'`` +
     class name of the node.  So a `Try` node visit function would
     be `visit_Try`.
     """
 
     def generic_visit(self, node):
         """Called if no explicit visitor function exists for a node."""
-        pass
+        for field_name in node._fields:
+            field_val = getattr(node, field_name)
+            if isinstance(field_val, list):
+                for field_val_elt in field_val:
+                    self.visit(field_val_elt)
+            elif isinstance(field_val, ast.AST):
+                self.visit(field_val)
 
     def visit(self, node):
         """Visit a node."""
         visit_attr = 'visit_' + type(node).__name__
         if hasattr(self, visit_attr):
-            getattr(self, visit_attr)(node)
+            return getattr(self, visit_attr)(node)
         else:
-            self.generic_visit(node)
+            return self.generic_visit(node)
 
+class Transformer(Visitor):
+    """
+    A node transformer base class that does a post-order traversal
+    of the abstract syntax tree while allowing to replace or remove
+    the nodes being traversed.
+
+    The return value of the visitor methods is used to replace or remove
+    the old node.  If the return value of the visitor method is ``None``,
+    the node will be removed from its location, otherwise it is replaced
+    with the return value.  The return value may be the original node
+    in which case no replacement takes place.
+
+    This class is meant to be subclassed, with the subclass adding
+    visitor methods. The visitor method should call ``self.generic_visit(node)``
+    to continue the traversal; this allows to perform arbitrary
+    actions both before and after traversing the children of a node.
+
+    The visitor methods for the nodes are ``'visit_'`` +
+    class name of the node.  So a `Try` node visit function would
+    be `visit_Try`.
+    """
+
+    def generic_visit(self, node):
+        """Called if no explicit visitor function exists for a node."""
         for field_name in node._fields:
             field_val = getattr(node, field_name)
-            if isinstance(field_val, ast.AST):
-                self.visit(field_val)
-            elif isinstance(field_val, list):
-                for field_val_elt in field_val:
-                    self.visit(field_val_elt)
+            if isinstance(field_val, list):
+                setattr(node, field_name,
+                        list(filter(lambda x: x is not None, map(self.visit, field_val))))
+            elif isinstance(field_val, ast.AST):
+                setattr(node, field_name, self.visit(field_val))
+
+        return node
 
 def compare(left, right, compare_locs=False):
     """

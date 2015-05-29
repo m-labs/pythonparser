@@ -1,6 +1,31 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 import sys, pythonparser.source, pythonparser.lexer, pythonparser.parser, pythonparser.diagnostic
 
+def parse_buffer(buffer, mode='exec', flags=[], version=None, engine=None):
+    """
+    Like :meth:`parse`, but accepts a :class:`source.Buffer` instead of
+    source and filename."""
+
+    if version is None:
+        version = sys.version_info[0:2]
+
+    if engine is None:
+        engine = pythonparser.diagnostic.Engine()
+
+    lexer = pythonparser.lexer.Lexer(buffer, version, engine)
+    if mode in ('single', 'eval'):
+        lexer.interactive = True
+
+    parser = pythonparser.parser.Parser(lexer, version, engine)
+    parser.add_flags(flags)
+
+    if mode == 'exec':
+        return parser.file_input()
+    elif mode == 'single':
+        return parser.single_input()
+    elif mode == 'eval':
+        return parser.eval_input()
+
 def parse(source, filename='<unknown>', mode='exec',
           flags=[], version=None, engine=None):
     """
@@ -24,24 +49,6 @@ def parse(source, filename='<unknown>', mode='exec',
     :raise: :class:`diagnostic.Error`
         if the source code is not well-formed
     """
-    if version is None:
-        version = sys.version_info[0:2]
+    return parse_buffer(pythonparser.source.Buffer(source, filename),
+                        mode, flags, version, engine)
 
-    if engine is None:
-        engine = pythonparser.diagnostic.Engine()
-
-    buffer = pythonparser.source.Buffer(source, filename)
-
-    lexer = pythonparser.lexer.Lexer(buffer, version, engine)
-    if mode in ('single', 'eval'):
-        lexer.interactive = True
-
-    parser = pythonparser.parser.Parser(lexer, version, engine)
-    parser.add_flags(flags)
-
-    if mode == 'exec':
-        return parser.file_input()
-    elif mode == 'single':
-        return parser.single_input()
-    elif mode == 'eval':
-        return parser.eval_input()

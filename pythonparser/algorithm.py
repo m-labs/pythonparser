@@ -24,22 +24,24 @@ class Visitor:
     def generic_visit(self, node):
         """Called if no explicit visitor function exists for a node."""
         for field_name in node._fields:
-            field_val = getattr(node, field_name)
-            if isinstance(field_val, list):
-                for field_val_elt in field_val:
-                    self.visit(field_val_elt)
-            elif isinstance(field_val, ast.AST):
-                self.visit(field_val)
+            self.visit(getattr(node, field_name))
 
-    def visit(self, node):
-        """Visit a node."""
+    def _visit_one(self, node):
         visit_attr = 'visit_' + type(node).__name__
         if hasattr(self, visit_attr):
-            return getattr(self, visit_attr)(node)
+            getattr(self, visit_attr)(node)
         else:
-            return self.generic_visit(node)
+            self.generic_visit(node)
 
-class Transformer(Visitor):
+    def visit(self, obj):
+        """Visit a node or a list of nodes. Other values are ignored"""
+        if isinstance(obj, list):
+            for elt in obj:
+                self._visit_one(elt)
+        elif isinstance(obj, ast.AST):
+            self._visit_one(obj)
+
+class Transformer:
     """
     A node transformer base class that does a post-order traversal
     of the abstract syntax tree while allowing to replace or remove
@@ -64,14 +66,22 @@ class Transformer(Visitor):
     def generic_visit(self, node):
         """Called if no explicit visitor function exists for a node."""
         for field_name in node._fields:
-            field_val = getattr(node, field_name)
-            if isinstance(field_val, list):
-                setattr(node, field_name,
-                        list(filter(lambda x: x is not None, map(self.visit, field_val))))
-            elif isinstance(field_val, ast.AST):
-                setattr(node, field_name, self.visit(field_val))
-
+            setattr(node, field_name, self.visit(getattr(node, field_name)))
         return node
+
+    def _visit_one(self, node):
+        visit_attr = 'visit_' + type(node).__name__
+        if hasattr(self, visit_attr):
+            return getattr(self, visit_attr)(node)
+        else:
+            return self.generic_visit(node)
+
+    def visit(self, obj):
+        """Visit a node or a list of nodes. Other values are ignored"""
+        if isinstance(obj, list):
+            return list(filter(lambda x: x is not None, map(self._visit_one, obj)))
+        elif isinstance(obj, ast.AST):
+            return self._visit_one(obj)
 
 def compare(left, right, compare_locs=False):
     """

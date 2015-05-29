@@ -62,6 +62,7 @@ class Diagnostic:
         the formatted message, the source line corresponding
         to ``location`` and a line emphasizing the problematic
         locations in the source line using ASCII art, as a list of lines.
+        Appends the result of calling :meth:`render` on ``notes``, if any.
 
         For example: ::
 
@@ -85,7 +86,7 @@ class Diagnostic:
             "%s: %s: %s" % (str(self.location), self.level, self.message()),
             source_line,
             highlight_line.decode('utf-8')
-        ]
+        ] + reduce(list.__add__, [note.render() for note in self.notes], [])
 
 
 class Error(Exception):
@@ -98,8 +99,7 @@ class Error(Exception):
         self.diagnostic = diagnostic
 
     def __str__(self):
-        return "\n".join(self.diagnostic.render() +
-                         reduce(list.__add__, map(Diagnostic.render, self.diagnostic.notes), []))
+        return "\n".join(self.diagnostic.render())
 
 class Engine:
     """

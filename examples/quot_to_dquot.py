@@ -1,14 +1,15 @@
 import sys, re
-from pythonparser import source, lexer
+from pythonparser import source, lexer, diagnostic
 
 buf = None
 with open(sys.argv[1]) as f:
     buf = source.Buffer(f.read(), f.name)
 
+engine   = diagnostic.Engine()
 rewriter = source.Rewriter(buf)
 in_quot  = False
 replace  = { "'": '"', "'''": '"""' }
-for token in lexer.Lexer(buf, (3, 4)):
+for token in lexer.Lexer(buf, (3, 4), engine):
     source = token.loc.source()
     if token.kind == 'strbegin' and source in replace.keys():
         rewriter.replace(token.loc, replace[source])

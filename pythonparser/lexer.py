@@ -241,10 +241,10 @@ class Lexer:
 
             for i in self.indent[1:]:
                 self.indent.pop(-1)
-                self.queue.append(Token(range, 'dedent'))
+                self.queue.append(Token(range, "dedent"))
 
             if eof_token:
-                self.queue.append(Token(range, 'eof'))
+                self.queue.append(Token(range, "eof"))
             elif len(self.queue) == 0:
                 raise StopIteration
 
@@ -266,7 +266,7 @@ class Lexer:
             range = source.Range(self.source_buffer, match.start(1), match.start(1))
             if level > self.indent[-1][0]:
                 self.indent.append((level, range, whitespace))
-                self.queue.append(Token(range, 'indent'))
+                self.queue.append(Token(range, "indent"))
             elif level < self.indent[-1][0]:
                 exact = False
                 while level <= self.indent[-1][0]:
@@ -274,7 +274,7 @@ class Lexer:
                         exact = True
                         break
                     self.indent.pop(-1)
-                    self.queue.append(Token(range, 'dedent'))
+                    self.queue.append(Token(range, "dedent"))
                 if not exact:
                     note = diagnostic.Diagnostic(
                         "note", "expected to match level here", {},
@@ -375,7 +375,7 @@ class Lexer:
         elif match.group(21) is not None: # keywords and operators
             kwop = match.group(21)
             self._match_pair_delim(tok_range, kwop)
-            if kwop == 'print' and self.print_function:
+            if kwop == "print" and self.print_function:
                 self.queue.append(Token(tok_range, "ident", "print"))
             else:
                 self.queue.append(Token(tok_range, kwop))
@@ -406,15 +406,15 @@ class Lexer:
         if options not in self._string_prefixes[self.version]:
             error = diagnostic.Diagnostic(
                 "error", "string prefix '{prefix}' is not available in Python {major}.{minor}",
-                {'prefix': options, 'major': self.version[0], 'minor': self.version[1]},
+                {"prefix": options, "major": self.version[0], "minor": self.version[1]},
                 begin_range)
             self.diagnostic_engine.process(error)
 
-        self.queue.append(Token(begin_range, 'strbegin', options))
+        self.queue.append(Token(begin_range, "strbegin", options))
         self.queue.append(Token(data_range,
-                          'strdata', self._replace_escape(data_range, options, data)))
+                          "strdata", self._replace_escape(data_range, options, data)))
         self.queue.append(Token(source.Range(self.source_buffer, *end_span),
-                          'strend'))
+                          "strend"))
 
     def _replace_escape(self, range, mode, value):
         is_raw     = ("r" in mode)
@@ -453,7 +453,7 @@ class Lexer:
                 chr = match.group(1)
                 if chr == "\n":
                     pass
-                elif chr == "\\" or chr == "'" or chr == '"':
+                elif chr == "\\" or chr == "'" or chr == "\"":
                     chunks.append(chr)
                 elif chr == "a":
                     chunks.append("\a")
@@ -496,7 +496,7 @@ class Lexer:
                                      range.begin_pos + match.end(0)))
                     self.diagnostic_engine.process(error)
 
-        return ''.join(chunks)
+        return "".join(chunks)
 
     def _check_long_literal(self, range, literal):
         if literal[-1] in "lL" and self.version >= (3, 0):

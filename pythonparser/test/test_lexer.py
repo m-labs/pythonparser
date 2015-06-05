@@ -148,11 +148,11 @@ class LexerTestCase(unittest.TestCase):
                          "strbegin", "",
                          "strdata",  "",
                          "strend",   None)
-        self.assertLexes('""',
+        self.assertLexes("\"\"",
                          "strbegin", "",
                          "strdata",  "",
                          "strend",   None)
-        self.assertLexes('""""""',
+        self.assertLexes("\"\"\"\"\"\"",
                          "strbegin", "",
                          "strdata",  "",
                          "strend",   None)

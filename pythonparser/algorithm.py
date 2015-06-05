@@ -27,7 +27,7 @@ class Visitor:
             self.visit(getattr(node, field_name))
 
     def _visit_one(self, node):
-        visit_attr = 'visit_' + type(node).__name__
+        visit_attr = "visit_" + type(node).__name__
         if hasattr(self, visit_attr):
             getattr(self, visit_attr)(node)
         else:
@@ -70,7 +70,7 @@ class Transformer:
         return node
 
     def _visit_one(self, node):
-        visit_attr = 'visit_' + type(node).__name__
+        visit_attr = "visit_" + type(node).__name__
         if hasattr(self, visit_attr):
             return getattr(self, visit_attr)(node)
         else:

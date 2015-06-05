@@ -9,7 +9,7 @@ class PushDocCommand(Command):
     def finalize_options(self):
         pass
     def run(self):
-        os.system('rsync -avz doc/_build/html/ shell.serverraum.org:~/web/m-labs.hk/pythonparser')
+        os.system("rsync -avz doc/_build/html/ shell.serverraum.org:~/web/m-labs.hk/pythonparser")
 
 setup(
     name="pythonparser",
@@ -20,14 +20,14 @@ setup(
     description="A Python parser intended for use in tooling",
     long_description=open("README.md").read(),
     license="BSD",
-    install_requires=['regex'],
+    install_requires=["regex"],
     extras_require={},
     dependency_links=[],
-    packages=find_packages(exclude=['tests*']),
+    packages=find_packages(exclude=["tests*"]),
     namespace_packages=[],
     test_suite="pythonparser.test",
     package_data={},
     ext_modules=[],
     entry_points={},
-    cmdclass={'push_doc':PushDocCommand}
+    cmdclass={"push_doc":PushDocCommand}
 )

@@ -24,7 +24,7 @@ class Diagnostic:
         locations that are unlikely to be on the same line
     """
 
-    LEVELS = ['note', 'warning', 'error', 'fatal']
+    LEVELS = ["note", "warning", "error", "fatal"]
     """
     Available diagnostic levels:
         * ``fatal`` indicates an unrecoverable error.
@@ -71,21 +71,21 @@ class Diagnostic:
                  ~ ^ ~~~
         """
         source_line = self.location.source_line().rstrip("\n")
-        highlight_line = bytearray(" ", 'utf-8') * len(source_line)
+        highlight_line = bytearray(" ", "utf-8") * len(source_line)
 
         for hilight in self.highlights:
             lft, rgt = hilight.column_range()
-            highlight_line[lft:rgt] = bytearray("~", 'utf-8') * (rgt - lft)
+            highlight_line[lft:rgt] = bytearray("~", "utf-8") * (rgt - lft)
 
         lft, rgt = self.location.column_range()
         if rgt == lft: # Expand zero-length ranges to one ^
             rgt = lft + 1
-        highlight_line[lft:rgt] = bytearray("^", 'utf-8') * (rgt - lft)
+        highlight_line[lft:rgt] = bytearray("^", "utf-8") * (rgt - lft)
 
         return [
             "%s: %s: %s" % (str(self.location), self.level, self.message()),
             source_line,
-            highlight_line.decode('utf-8')
+            highlight_line.decode("utf-8")
         ] + reduce(list.__add__, [note.render() for note in self.notes], [])
 
 
@@ -117,8 +117,8 @@ class Engine:
         The default implementation of :meth:`process` renders non-fatal
         diagnostics to ``sys.stderr``, and raises fatal ones as a :class:`Error`.
         """
-        if diagnostic.level == 'fatal' or \
-                (self.all_errors_are_fatal and diagnostic.level == 'error'):
+        if diagnostic.level == "fatal" or \
+                (self.all_errors_are_fatal and diagnostic.level == "error"):
             raise Error(diagnostic)
         else:
             sys.stderr.puts("\n".join(diagnostic.render()))

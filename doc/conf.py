@@ -1,6 +1,6 @@
-master_doc = 'index'
+master_doc = "index"
 
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.autosummary',
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
 ]

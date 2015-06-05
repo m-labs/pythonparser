@@ -1,7 +1,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 import sys, pythonparser.source, pythonparser.lexer, pythonparser.parser, pythonparser.diagnostic
 
-def parse_buffer(buffer, mode='exec', flags=[], version=None, engine=None):
+def parse_buffer(buffer, mode="exec", flags=[], version=None, engine=None):
     """
     Like :meth:`parse`, but accepts a :class:`source.Buffer` instead of
     source and filename."""
@@ -13,20 +13,20 @@ def parse_buffer(buffer, mode='exec', flags=[], version=None, engine=None):
         engine = pythonparser.diagnostic.Engine()
 
     lexer = pythonparser.lexer.Lexer(buffer, version, engine)
-    if mode in ('single', 'eval'):
+    if mode in ("single", "eval"):
         lexer.interactive = True
 
     parser = pythonparser.parser.Parser(lexer, version, engine)
     parser.add_flags(flags)
 
-    if mode == 'exec':
+    if mode == "exec":
         return parser.file_input()
-    elif mode == 'single':
+    elif mode == "single":
         return parser.single_input()
-    elif mode == 'eval':
+    elif mode == "eval":
         return parser.eval_input()
 
-def parse(source, filename='<unknown>', mode='exec',
+def parse(source, filename="<unknown>", mode="exec",
           flags=[], version=None, engine=None):
     """
     Parse a string into an abstract syntax tree.

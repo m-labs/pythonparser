@@ -223,7 +223,7 @@ class Rewriter:
             pos = range.end_pos
         rewritten.append(self.buffer.source[pos:])
 
-        return Buffer(''.join(rewritten), self.buffer.name, self.buffer.first_line)
+        return Buffer("".join(rewritten), self.buffer.name, self.buffer.first_line)
 
     def _sort(self):
         self.ranges.sort(key=lambda x: x[0].begin_pos)

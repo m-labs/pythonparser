@@ -74,8 +74,9 @@ class Diagnostic:
         highlight_line = bytearray(" ", "utf-8") * len(source_line)
 
         for hilight in self.highlights:
-            lft, rgt = hilight.column_range()
-            highlight_line[lft:rgt] = bytearray("~", "utf-8") * (rgt - lft)
+            if hilight.line() == self.location.line():
+                lft, rgt = hilight.column_range()
+                highlight_line[lft:rgt] = bytearray("~", "utf-8") * (rgt - lft)
 
         lft, rgt = self.location.column_range()
         if rgt == lft: # Expand zero-length ranges to one ^

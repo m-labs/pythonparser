@@ -170,6 +170,17 @@ class Range:
         """
         return not (self == other)
 
+class Comment:
+    """
+    A comment in the source code.
+
+    :ivar loc: (:class:`Range`) source location
+    :ivar text: (string) comment text
+    """
+
+    def __init__(self, loc, text):
+        self.loc, self.text = loc, text
+
 class RewriterConflict(Exception):
     """
     An exception that is raised when two ranges supplied to a rewriter overlap.

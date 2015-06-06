@@ -4,7 +4,12 @@ import sys, pythonparser.source, pythonparser.lexer, pythonparser.parser, python
 def parse_buffer(buffer, mode="exec", flags=[], version=None, engine=None):
     """
     Like :meth:`parse`, but accepts a :class:`source.Buffer` instead of
-    source and filename."""
+    source and filename, and returns comments as well.
+
+    :see: :meth:`parse`
+    :return: (:class:`ast.AST`, list of :class:`source.Comment`)
+        Abstract syntax tree and comments
+    """
 
     if version is None:
         version = sys.version_info[0:2]
@@ -20,11 +25,11 @@ def parse_buffer(buffer, mode="exec", flags=[], version=None, engine=None):
     parser.add_flags(flags)
 
     if mode == "exec":
-        return parser.file_input()
+        return parser.file_input(), lexer.comments
     elif mode == "single":
-        return parser.single_input()
+        return parser.single_input(), lexer.comments
     elif mode == "eval":
-        return parser.eval_input()
+        return parser.eval_input(), lexer.comments
 
 def parse(source, filename="<unknown>", mode="exec",
           flags=[], version=None, engine=None):
@@ -49,6 +54,7 @@ def parse(source, filename="<unknown>", mode="exec",
     :raise: :class:`diagnostic.Error`
         if the source code is not well-formed
     """
-    return parse_buffer(pythonparser.source.Buffer(source, filename),
-                        mode, flags, version, engine)
+    ast, comments = parse_buffer(pythonparser.source.Buffer(source, filename),
+                                 mode, flags, version, engine)
+    return ast
 

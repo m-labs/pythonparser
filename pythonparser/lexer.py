@@ -310,7 +310,7 @@ class Lexer:
             return
 
         if match.group(4) is not None: # comment
-            self.comments.append((tok_range, match.group(4)))
+            self.comments.append(source.Comment(tok_range, match.group(4)))
             return self._refill(eof_token)
 
         # Lexing non-whitespace now.

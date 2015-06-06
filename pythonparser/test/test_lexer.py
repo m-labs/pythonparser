@@ -63,8 +63,10 @@ class LexerTestCase(unittest.TestCase):
 
     def test_comment(self):
         self.assertLexes("# foo")
-        self.assertEqual([(source.Range(self.buffer, 0, 5), "# foo")],
-                         self.lexer.comments)
+        self.assertEqual(source.Range(self.buffer, 0, 5),
+                         self.lexer.comments[0].loc)
+        self.assertEqual("# foo",
+                         self.lexer.comments[0].text)
 
         self.assertLexes("class x:\n  # foo\n  pass",
                          "class",   None,

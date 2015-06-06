@@ -56,7 +56,7 @@ class Diagnostic:
         """
         return self.reason.format(**self.arguments)
 
-    def render(self):
+    def render(self, only_line=False):
         """
         Returns the human-readable location of the diagnostic in the source,
         the formatted message, the source line corresponding
@@ -66,9 +66,11 @@ class Diagnostic:
 
         For example: ::
 
-            <input>:1:8: error: cannot add integer and string
+            <input>:1:8-9: error: cannot add integer and string
             x + (1 + "a")
                  ~ ^ ~~~
+
+        :param only_line: (bool) If true, only print line number, not line and column range
         """
         source_line = self.location.source_line().rstrip("\n")
         highlight_line = bytearray(" ", "utf-8") * len(source_line)
@@ -83,11 +85,16 @@ class Diagnostic:
             rgt = lft + 1
         highlight_line[lft:rgt] = bytearray("^", "utf-8") * (rgt - lft)
 
+        if only_line:
+            location = "%s:%s" % (self.location.source_buffer.name, self.location.line())
+        else:
+            location = str(self.location)
+
         return [
-            "%s: %s: %s" % (str(self.location), self.level, self.message()),
+            "%s: %s: %s" % (location, self.level, self.message()),
             source_line,
             highlight_line.decode("utf-8")
-        ] + reduce(list.__add__, [note.render() for note in self.notes], [])
+        ] + reduce(list.__add__, [note.render(only_line) for note in self.notes], [])
 
 
 class Error(Exception):

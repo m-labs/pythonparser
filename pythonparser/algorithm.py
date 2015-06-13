@@ -82,6 +82,8 @@ class Transformer:
             return list(filter(lambda x: x is not None, map(self.visit, obj)))
         elif isinstance(obj, ast.AST):
             return self._visit_one(obj)
+        else:
+            return obj
 
 def compare(left, right, compare_locs=False):
     """

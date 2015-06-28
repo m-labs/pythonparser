@@ -152,8 +152,9 @@ class Range:
         """
         Returns a Clang-style string representation of the beginning of this range.
         """
-        return "%s:%d:%d-%d" % (self.source_buffer.name,
-                                self.line(), self.column() + 1, self.end().column() + 1)
+        return "%s:%d:%d-%d:%d" % (self.source_buffer.name,
+                                self.line(), self.column() + 1,
+                                self.end().line(), self.end().column() + 1)
 
     def __eq__(self, other):
         """

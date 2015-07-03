@@ -29,17 +29,16 @@ class Visitor:
     def _visit_one(self, node):
         visit_attr = "visit_" + type(node).__name__
         if hasattr(self, visit_attr):
-            getattr(self, visit_attr)(node)
+            return getattr(self, visit_attr)(node)
         else:
-            self.generic_visit(node)
+            return self.generic_visit(node)
 
     def visit(self, obj):
         """Visit a node or a list of nodes. Other values are ignored"""
         if isinstance(obj, list):
-            for elt in obj:
-                self.visit(elt)
+            [self.visit(elt) for elt in obj]
         elif isinstance(obj, ast.AST):
-            self._visit_one(obj)
+            return self._visit_one(obj)
 
 class Transformer:
     """

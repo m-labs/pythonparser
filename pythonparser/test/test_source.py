@@ -86,7 +86,7 @@ class RangeTestCase(unittest.TestCase):
         self.assertEqual("line two\n", self.range(9, 9).source_line())
 
     def test___str__(self):
-        self.assertEqual("<input>:2:1-1", str(self.range(9, 9)))
+        self.assertEqual("<input>:2:1-2:1", str(self.range(9, 9)))
 
     def test___ne__(self):
         self.assertTrue(self.range(0,0) != self.range(0,1))

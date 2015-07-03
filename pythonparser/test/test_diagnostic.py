@@ -21,7 +21,7 @@ class DiagnosticTestCase(unittest.TestCase):
             [source.Range(self.buffer, 5, 6),
              source.Range(self.buffer, 9, 12)])
         self.assertEqual(
-            ["<input>:1:8-9: error: cannot add integer and string",
+            ["<input>:1:8-1:9: error: cannot add integer and string",
              "x + (1 + 'a')",
              "     ~ ^ ~~~ "],
             diag.render())

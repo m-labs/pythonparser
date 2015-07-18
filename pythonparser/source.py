@@ -148,6 +148,13 @@ class Range:
         """
         return self.source_buffer.source_line(self.line())
 
+    def source_lines(self):
+        """
+        Returns the lines of source code containing the entirety of this range.
+        """
+        return [self.source_buffer.source_line(line)
+                for line in range(self.line(), self.end().line() + 1)]
+
     def __str__(self):
         """
         Returns a Clang-style string representation of the beginning of this range.

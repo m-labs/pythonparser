@@ -85,6 +85,10 @@ class RangeTestCase(unittest.TestCase):
     def test_source_line(self):
         self.assertEqual("line two\n", self.range(9, 9).source_line())
 
+    def test_source_lines(self):
+        self.assertEqual(["line two\n"], self.range(9, 9).source_lines())
+        self.assertEqual(["line two\n", "\n"], self.range(9, 18).source_lines())
+
     def test___str__(self):
         self.assertEqual("<input>:2:1-2:1", str(self.range(9, 9)))
 

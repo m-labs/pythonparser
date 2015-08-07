@@ -72,11 +72,13 @@ class Range:
 
     :ivar begin_pos: (integer) offset of the first character
     :ivar end_pos: (integer) offset of the character before the last
+    :ivar expanded_from: (Range or None) the range from which this range was expanded
     """
-    def __init__(self, source_buffer, begin_pos, end_pos):
+    def __init__(self, source_buffer, begin_pos, end_pos, expanded_from=None):
         self.source_buffer = source_buffer
         self.begin_pos = begin_pos
         self.end_pos = end_pos
+        self.expanded_from = expanded_from
 
     def __repr__(self):
         """
@@ -84,6 +86,14 @@ class Range:
         """
         return "Range(\"%s\", %d, %d)" % \
             (self.source_buffer.name, self.begin_pos, self.end_pos)
+
+    def chain(self, expanded_from):
+        """
+        Returns a range identical to this one, but indicating that
+        it was expanded from the range `expanded_from`.
+        """
+        return Range(self.source_buffer, self.begin_pos, self.begin_pos,
+                     expanded_from=expanded_from)
 
     def begin(self):
         """

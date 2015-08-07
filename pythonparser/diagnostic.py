@@ -91,8 +91,17 @@ class Diagnostic:
         else:
             location = str(self.location)
 
+        notes = list(self.notes)
+        if self.level != "note":
+            expanded_location = self.location.expanded_from
+            while expanded_location is not None:
+                notes.append(Diagnostic("note",
+                    "expanded from here", {},
+                    self.location.expanded_from))
+                expanded_location = expanded_location.expanded_from
+
         rendered_notes = reduce(list.__add__, [note.render(only_line, colored)
-                                               for note in self.notes], [])
+                                               for note in notes], [])
         if colored:
             if self.level in ("error", "fatal"):
                 level_color = 31 # red
@@ -105,13 +114,13 @@ class Diagnostic:
                     format(location, level_color, self.level, self.message()),
                 source_line,
                 "\x1b[1;32m{}\x1b[0m".format(highlight_line.decode("utf-8"))
-            ]
+            ] + rendered_notes
         else:
             return [
                 "{}: {}: {}".format(location, self.level, self.message()),
                 source_line,
                 highlight_line.decode("utf-8")
-            ]
+            ] + rendered_notes
 
 
 class Error(Exception):

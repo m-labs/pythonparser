@@ -57,7 +57,7 @@ class Diagnostic:
         """
         return self.reason.format(**self.arguments)
 
-    def render(self, only_line=False):
+    def render(self, only_line=False, colored=False):
         """
         Returns the human-readable location of the diagnostic in the source,
         the formatted message, the source line corresponding
@@ -91,11 +91,27 @@ class Diagnostic:
         else:
             location = str(self.location)
 
-        return [
-            "%s: %s: %s" % (location, self.level, self.message()),
-            source_line,
-            highlight_line.decode("utf-8")
-        ] + reduce(list.__add__, [note.render(only_line) for note in self.notes], [])
+        rendered_notes = reduce(list.__add__, [note.render(only_line, colored)
+                                               for note in self.notes], [])
+        if colored:
+            if self.level in ("error", "fatal"):
+                level_color = 31 # red
+            elif self.level == "warning":
+                level_color = 35 # magenta
+            else: # level == "note"
+                level_color = 30 # gray
+            return [
+                "\x1b[1;37m{}: \x1b[{}m{}:\x1b[37m {}\x1b[0m".
+                    format(location, level_color, self.level, self.message()),
+                source_line,
+                "\x1b[1;32m{}\x1b[0m".format(highlight_line.decode("utf-8"))
+            ]
+        else:
+            return [
+                "{}: {}: {}".format(location, self.level, self.message()),
+                source_line,
+                highlight_line.decode("utf-8")
+            ]
 
 
 class Error(Exception):

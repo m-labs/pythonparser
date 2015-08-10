@@ -192,6 +192,9 @@ class Range:
         """
         return not (self == other)
 
+    def __hash__(self):
+        return hash((self.source_buffer, self.begin_pos, self.end_pos))
+
 class Comment:
     """
     A comment in the source code.

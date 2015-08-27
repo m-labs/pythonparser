@@ -84,8 +84,8 @@ class Range:
         """
         Returns a human-readable representation of this range.
         """
-        return "Range(\"%s\", %d, %d)" % \
-            (self.source_buffer.name, self.begin_pos, self.end_pos)
+        return "Range(\"%s\", %d, %d, %s)" % \
+            (self.source_buffer.name, self.begin_pos, self.end_pos, repr(self.expanded_from))
 
     def chain(self, expanded_from):
         """

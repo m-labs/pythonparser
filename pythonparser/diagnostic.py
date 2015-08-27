@@ -95,7 +95,7 @@ class Diagnostic:
         if self.level != "note":
             expanded_location = self.location.expanded_from
             while expanded_location is not None:
-                notes.append(Diagnostic("note",
+                notes.insert(0, Diagnostic("note",
                     "expanded from here", {},
                     self.location.expanded_from))
                 expanded_location = expanded_location.expanded_from

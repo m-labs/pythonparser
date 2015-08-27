@@ -99,13 +99,15 @@ class Range:
         """
         Returns a zero-length range located just before the beginning of this range.
         """
-        return Range(self.source_buffer, self.begin_pos, self.begin_pos)
+        return Range(self.source_buffer, self.begin_pos, self.begin_pos,
+                     expanded_from=self.expanded_from)
 
     def end(self):
         """
         Returns a zero-length range located just after the end of this range.
         """
-        return Range(self.source_buffer, self.end_pos, self.end_pos)
+        return Range(self.source_buffer, self.end_pos, self.end_pos,
+                     expanded_from=self.expanded_from)
 
     def size(self):
         """
@@ -142,9 +144,14 @@ class Range:
         """
         if self.source_buffer != other.source_buffer:
             raise ValueError
+        if self.expanded_from == other.expanded_from:
+            expanded_from = self.expanded_from
+        else:
+            expanded_from = None
         return Range(self.source_buffer,
                      min(self.begin_pos, other.begin_pos),
-                     max(self.end_pos, other.end_pos))
+                     max(self.end_pos, other.end_pos),
+                     expanded_from=expanded_from)
 
     def source(self):
         """
@@ -184,7 +191,8 @@ class Range:
         return (type(self) == type(other) and
             self.source_buffer == other.source_buffer and
             self.begin_pos == other.begin_pos and
-            self.end_pos == other.end_pos)
+            self.end_pos == other.end_pos and
+            self.expanded_from == other.expanded_from)
 
     def __ne__(self, other):
         """
@@ -193,7 +201,7 @@ class Range:
         return not (self == other)
 
     def __hash__(self):
-        return hash((self.source_buffer, self.begin_pos, self.end_pos))
+        return hash((self.source_buffer, self.begin_pos, self.end_pos, self.expanded_from))
 
 class Comment:
     """

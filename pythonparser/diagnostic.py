@@ -5,7 +5,7 @@ and presentation of diagnostic messages.
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 from functools import reduce
-import sys
+import sys, re
 
 class Diagnostic:
     """
@@ -74,7 +74,7 @@ class Diagnostic:
         :param only_line: (bool) If true, only print line number, not line and column range
         """
         source_line = self.location.source_line().rstrip("\n")
-        highlight_line = bytearray(" ", "utf-8") * len(source_line)
+        highlight_line = bytearray(re.sub(r"[^\t]", " ", source_line), "utf-8")
 
         for hilight in self.highlights:
             if hilight.line() == self.location.line():

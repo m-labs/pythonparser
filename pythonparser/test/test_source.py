@@ -38,7 +38,7 @@ class RangeTestCase(unittest.TestCase):
         return source.Range(self.buffer, lft, rgt)
 
     def test_repr(self):
-        self.assertEqual("Range(\"<input>\", 0, 2)",
+        self.assertEqual("Range(\"<input>\", 0, 2, None)",
                          repr(self.range(0, 2)))
 
     def test_begin(self):

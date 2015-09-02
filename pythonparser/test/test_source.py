@@ -61,6 +61,7 @@ class RangeTestCase(unittest.TestCase):
         self.assertEqual((2,2), self.range(2, 2).column_range())
         self.assertEqual((0,2), self.range(9, 11).column_range())
         self.assertEqual((2,2), self.range(11, 11).column_range())
+        self.assertEqual((0,8), self.range(0, 11).column_range())
 
     def test_line(self):
         self.assertEqual(1, self.range(2, 2).line())

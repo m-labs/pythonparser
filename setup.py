@@ -19,7 +19,7 @@ setup(
     url="http://m-labs.hk/pythonparser",
     description="A Python parser intended for use in tooling",
     long_description=open("README.md").read(),
-    license="BSD",
+    license="MIT",
     install_requires=["regex"],
     extras_require={},
     dependency_links=[],

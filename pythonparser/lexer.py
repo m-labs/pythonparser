@@ -260,7 +260,8 @@ class Lexer:
 
         # Should we emit indent/dedent?
         if self.new_line and \
-                match.group(3) is None: # not a blank line
+                match.group(3) is None and \
+                match.group(4) is None: # not a blank line
             whitespace = match.string[match.start(0):match.start(1)]
             level = len(whitespace.expandtabs())
             range = source.Range(self.source_buffer, match.start(1), match.start(1))

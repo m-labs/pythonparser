@@ -77,6 +77,15 @@ class LexerTestCase(unittest.TestCase):
                          "pass",    None,
                          "dedent",  None)
 
+        self.assertLexes("class x:\n    # foo\n  pass",
+                         "class",   None,
+                         "ident",   "x",
+                         ":",       None,
+                         "newline", None,
+                         "indent",  None,
+                         "pass",    None,
+                         "dedent",  None)
+
     def test_float(self):
         self.assertLexes("0.0",
                          "float", 0.0)

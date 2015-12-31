@@ -155,4 +155,4 @@ class Engine:
                 (self.all_errors_are_fatal and diagnostic.level == "error"):
             raise Error(diagnostic)
         else:
-            sys.stderr.puts("\n".join(diagnostic.render()))
+            sys.stderr.write("\n".join(diagnostic.render()) + "\n")

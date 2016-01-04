@@ -22,6 +22,7 @@ class ParserTestCase(unittest.TestCase):
 
         self.source_buffer = source.Buffer(code, str(version))
         self.engine = diagnostic.Engine()
+        self.engine.render_diagnostic = lambda diag: None
         self.lexer = lexer.Lexer(self.source_buffer, version, self.engine,
                                  interactive=interactive)
 

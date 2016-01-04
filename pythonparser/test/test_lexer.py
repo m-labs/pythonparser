@@ -11,6 +11,7 @@ class LexerTestCase(unittest.TestCase):
             tokens = expected_tokens
             self.buffer = source.Buffer(input)
             self.engine = diagnostic.Engine(all_errors_are_fatal=True)
+            self.engine.render_diagnostic = lambda diag: None
             self.lexer = lexer.Lexer(self.buffer, version, self.engine, **kwargs)
             for token in self.lexer:
                 if len(tokens) < 2:

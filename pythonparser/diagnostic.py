@@ -151,11 +151,10 @@ class Engine:
         The default implementation of :meth:`process` renders non-fatal
         diagnostics to ``sys.stderr``, and raises fatal ones as a :class:`Error`.
         """
+        self.render_diagnostic(diagnostic)
         if diagnostic.level == "fatal" or \
                 (self.all_errors_are_fatal and diagnostic.level == "error"):
             raise Error(diagnostic)
-        else:
-            self.print_diagnostic(diagnostic)
 
-    def print_diagnostic(self, diagnostic):
+    def render_diagnostic(self, diagnostic):
         sys.stderr.write("\n".join(diagnostic.render()) + "\n")

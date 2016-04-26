@@ -13,6 +13,6 @@ for filename in sys.argv[1:]:
             print(root)
             print("elapsed: %.2f (%.2f kb/s)" % (interval, len(input)/interval/1000),
                   file=sys.stderr)
-        except diagnostic.DiagnosticException as e:
+        except diagnostic.Error as e:
             print("\n".join(e.diagnostic.render()),
                   file=sys.stderr)

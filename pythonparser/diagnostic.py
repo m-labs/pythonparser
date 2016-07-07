@@ -165,14 +165,14 @@ class Engine:
             raise Error(diagnostic)
 
     @contextmanager
-    def context(self, note):
+    def context(self, *notes):
         """
         A context manager that appends ``note`` to every diagnostic processed by
         this engine.
         """
-        self._appended_notes.append(note)
+        self._appended_notes += notes
         yield
-        self._appended_notes.pop()
+        del self._appended_notes[-len(notes):]
 
     def render_diagnostic(self, diagnostic):
         sys.stderr.write("\n".join(diagnostic.render()) + "\n")

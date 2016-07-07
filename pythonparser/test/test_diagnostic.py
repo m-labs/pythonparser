@@ -37,16 +37,26 @@ class DiagnosticEngineTestCase(unittest.TestCase):
         self.engine.render_diagnostic = render_diagnostic
 
     def test_context(self):
-        note = diagnostic.Diagnostic(
+        note1 = diagnostic.Diagnostic(
             "note", "broken here", {},
             source.Range(self.buffer, 0, 0))
+        note2 = diagnostic.Diagnostic(
+            "note", "also broken there", {},
+            source.Range(self.buffer, 0, 0))
 
-        with self.engine.context(note):
+        with self.engine.context(note1):
+            with self.engine.context(note2):
+                diag = diagnostic.Diagnostic(
+                    "error", "{x} doesn't work", {"x": "everything"},
+                    source.Range(self.buffer, 0, 0))
+                self.engine.process(diag)
+                self.assertEqual(self.last_diagnostic.notes, [note1, note2])
+
             diag = diagnostic.Diagnostic(
                 "error", "{x} doesn't work", {"x": "everything"},
                 source.Range(self.buffer, 0, 0))
             self.engine.process(diag)
-            self.assertEqual(self.last_diagnostic.notes, [note])
+            self.assertEqual(self.last_diagnostic.notes, [note1])
 
         diag = diagnostic.Diagnostic(
             "error", "{x} doesn't work", {"x": "everything"},

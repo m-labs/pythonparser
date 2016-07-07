@@ -5,6 +5,7 @@ and presentation of diagnostic messages.
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 from functools import reduce
+from contextlib import contextmanager
 import sys, re
 
 class Diagnostic:
@@ -150,16 +151,28 @@ class Engine:
     """
     def __init__(self, all_errors_are_fatal=False):
         self.all_errors_are_fatal = all_errors_are_fatal
+        self._appended_notes = []
 
     def process(self, diagnostic):
         """
         The default implementation of :meth:`process` renders non-fatal
         diagnostics to ``sys.stderr``, and raises fatal ones as a :class:`Error`.
         """
+        diagnostic.notes += self._appended_notes
         self.render_diagnostic(diagnostic)
         if diagnostic.level == "fatal" or \
                 (self.all_errors_are_fatal and diagnostic.level == "error"):
             raise Error(diagnostic)
+
+    @contextmanager
+    def context(self, note):
+        """
+        A context manager that appends ``note`` to every diagnostic processed by
+        this engine.
+        """
+        self._appended_notes.append(note)
+        yield
+        self._appended_notes.pop()
 
     def render_diagnostic(self, diagnostic):
         sys.stderr.write("\n".join(diagnostic.render()) + "\n")

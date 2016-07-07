@@ -25,3 +25,31 @@ class DiagnosticTestCase(unittest.TestCase):
              "x + (1 + 'a')",
              "     ~ ^ ~~~ "],
             diag.render())
+
+class DiagnosticEngineTestCase(unittest.TestCase):
+
+    def setUp(self):
+        self.buffer = source.Buffer("x + (1 + 'a')\n")
+        self.last_diagnostic = None
+        self.engine = diagnostic.Engine()
+        def render_diagnostic(diag):
+            self.last_diagnostic = diag
+        self.engine.render_diagnostic = render_diagnostic
+
+    def test_context(self):
+        note = diagnostic.Diagnostic(
+            "note", "broken here", {},
+            source.Range(self.buffer, 0, 0))
+
+        with self.engine.context(note):
+            diag = diagnostic.Diagnostic(
+                "error", "{x} doesn't work", {"x": "everything"},
+                source.Range(self.buffer, 0, 0))
+            self.engine.process(diag)
+            self.assertEqual(self.last_diagnostic.notes, [note])
+
+        diag = diagnostic.Diagnostic(
+            "error", "{x} doesn't work", {"x": "everything"},
+            source.Range(self.buffer, 0, 0))
+        self.engine.process(diag)
+        self.assertEqual(self.last_diagnostic.notes, [])

@@ -38,9 +38,14 @@ class Diagnostic:
     """
 
     def __init__(self, level, reason, arguments, location,
-                 highlights=[], notes=[]):
+                 highlights=None, notes=None):
         if level not in self.LEVELS:
             raise ValueError("level must be one of Diagnostic.LEVELS")
+
+        if highlights is None:
+            highlights = []
+        if notes is None:
+            notes = []
 
         if len(set(map(lambda x: x.source_buffer,
                        [location] + highlights))) > 1:

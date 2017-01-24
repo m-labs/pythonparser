@@ -1148,7 +1148,7 @@ class Parser:
         if else_opt:
             stmt.else_loc, stmt.else_colon_loc, stmt.orelse = else_opt
 
-        for elif_ in elifs:
+        for elif_ in reversed(elifs):
             stmt.keyword_loc, stmt.test, stmt.if_colon_loc, stmt.body = elif_
             stmt.loc = stmt.keyword_loc.join(stmt.body[-1].loc)
             if stmt.orelse:

@@ -201,6 +201,7 @@ class ParserTestCase(unittest.TestCase):
     ast_expr_1 = {"ty": "Expr", "value": {"ty": "Num", "n": 1}}
     ast_expr_2 = {"ty": "Expr", "value": {"ty": "Num", "n": 2}}
     ast_expr_3 = {"ty": "Expr", "value": {"ty": "Num", "n": 3}}
+    ast_expr_4 = {"ty": "Expr", "value": {"ty": "Num", "n": 4}}
 
     ast_x = {"ty": "Name", "id": "x", "ctx": None}
     ast_y = {"ty": "Name", "id": "y", "ctx": None}
@@ -1397,18 +1398,21 @@ class ParserTestCase(unittest.TestCase):
 
         self.assertParsesSuite(
             [{"ty": "If", "test": self.ast_x, "body": [self.ast_expr_1], "orelse": [
-                {"ty": "If", "test": self.ast_y, "body": [self.ast_expr_2],
-                 "orelse": [self.ast_expr_3]}
-            ]}],
-            "if x:·  1·elif y:·  2·else:·  3",
+               {"ty": "If", "test": self.ast_y, "body": [self.ast_expr_2], "orelse": [
+                 {"ty": "If", "test": self.ast_z, "body": [self.ast_expr_3],
+                  "orelse": [self.ast_expr_4]}
+            ]}]}],
+            "if x:·  1·elif y:·  2·elif z:·  3·else:·  4",
             "^^ 0.keyword_loc"
             "    ^ 0.if_colon_loc"
             "          ~~~~ 0.orelse.0.keyword_loc"
             "                ^ 0.orelse.0.if_colon_loc"
-            "                      ~~~~ 0.orelse.0.else_loc"
-            "                          ^ 0.orelse.0.else_colon_loc"
-            "          ~~~~~~~~~~~~~~~~~~~~~ 0.orelse.0.loc"
-            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+            "                      ~~~~ 0.orelse.0.orelse.0.keyword_loc"
+            "                            ^ 0.orelse.0.orelse.0.if_colon_loc"
+            "                                  ~~~~ 0.orelse.0.orelse.0.else_loc"
+            "                                      ^ 0.orelse.0.orelse.0.else_colon_loc"
+            "          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.orelse.0.loc"
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
 
     def test_while(self):
         self.assertParsesSuite(

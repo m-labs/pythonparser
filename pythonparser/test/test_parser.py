@@ -1398,21 +1398,28 @@ class ParserTestCase(unittest.TestCase):
 
         self.assertParsesSuite(
             [{"ty": "If", "test": self.ast_x, "body": [self.ast_expr_1], "orelse": [
-               {"ty": "If", "test": self.ast_y, "body": [self.ast_expr_2], "orelse": [
-                 {"ty": "If", "test": self.ast_z, "body": [self.ast_expr_3],
-                  "orelse": [self.ast_expr_4]}
-            ]}]}],
-            "if x:·  1·elif y:·  2·elif z:·  3·else:·  4",
+                {"ty": "If", "test": self.ast_y, "body": [self.ast_expr_2],
+                 "orelse": [self.ast_expr_3]}
+            ]}],
+            "if x:·  1·elif y:·  2·else:·  3",
             "^^ 0.keyword_loc"
             "    ^ 0.if_colon_loc"
             "          ~~~~ 0.orelse.0.keyword_loc"
             "                ^ 0.orelse.0.if_colon_loc"
-            "                      ~~~~ 0.orelse.0.orelse.0.keyword_loc"
-            "                            ^ 0.orelse.0.orelse.0.if_colon_loc"
-            "                                  ~~~~ 0.orelse.0.orelse.0.else_loc"
-            "                                      ^ 0.orelse.0.orelse.0.else_colon_loc"
-            "          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.orelse.0.loc"
-            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+            "                      ~~~~ 0.orelse.0.else_loc"
+            "                          ^ 0.orelse.0.else_colon_loc"
+            "          ~~~~~~~~~~~~~~~~~~~~~ 0.orelse.0.loc"
+            "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 0.loc")
+
+        # Ensure elif nodes are in the correct order.
+        # See: https://github.com/m-labs/pythonparser/issues/7
+        self.assertParsesSuite(
+            [{"ty": "If", "test": self.ast_x, "body": [self.ast_expr_1], "orelse": [
+               {"ty": "If", "test": self.ast_y, "body": [self.ast_expr_2], "orelse": [
+                 {"ty": "If", "test": self.ast_z, "body": [self.ast_expr_3],
+                  "orelse": [self.ast_expr_4]}
+            ]}]}],
+            "if x:·  1·elif y:·  2·elif z:·  3·else:·  4")
 
     def test_while(self):
         self.assertParsesSuite(

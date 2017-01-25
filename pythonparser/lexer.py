@@ -187,7 +187,7 @@ class Lexer:
     _lex_escape_re = re.compile(r"""
     \\(?:
         ([\n\\'"abfnrtv]) # 1 single-char
-    |   ([0-7]{3})        # 2 oct
+    |   ([0-7]{1,3})      # 2 oct
     |   x([0-9A-Fa-f]{2}) # 3 hex
     )
     """, re.VERBOSE)

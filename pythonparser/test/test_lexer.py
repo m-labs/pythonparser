@@ -184,6 +184,11 @@ class LexerTestCase(unittest.TestCase):
                          "strdata",  "\n",
                          "strend",   None)
 
+        self.assertLexes(r"'\0 \10 \010'",
+                         "strbegin", "",
+                         "strdata",  "\x00 \x08 \x08",
+                         "strend",   None)
+
         self.assertDiagnoses(
                          "'",
                          [("fatal", "unterminated string", (0, 1))])

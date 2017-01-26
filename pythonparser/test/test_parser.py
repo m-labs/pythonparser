@@ -1686,6 +1686,36 @@ class ParserTestCase(unittest.TestCase):
             "~~~~~~~~~~~~~~~~~~ 0.loc",
             validate_if=lambda: sys.version_info >= (3, 0))
 
+        self.assertParsesSuite(
+            [{"ty": "ClassDef", "name": "x", "bases": [],
+              "keywords": [], "starargs": None, "kwargs": None,
+              "body": [{"ty": "Pass"}], "decorator_list": [{
+                "ty": "Attribute", "value": self.ast_x, "attr": "y", "ctx": None}]}],
+            "@x.y·class x:·  pass",
+            validate_if=lambda: sys.version_info >= (3, 0))
+
+        self.assertParsesSuite(
+            [{"ty": "FunctionDef", "name": "x",
+              "args": {"ty": "arguments", "args": [], "defaults": [],
+                       "kwonlyargs": [], "kw_defaults": [],
+                       "kwarg": None, "vararg": None},
+              "returns": None,
+              "body": [{"ty": "Pass"}], "decorator_list": [{
+                "ty": "Attribute", "attr": "z", "ctx": None, "value": {
+                  "ty": "Attribute", "attr": "y", "ctx": None, "value":
+                    self.ast_x}}]}],
+            "@x.y.z·def x():·  pass",
+            "^ 0.at_locs.0"
+            " ~~~~~ 0.decorator_list.0.loc"
+            "    ^  0.decorator_list.0.dot_loc"
+            "     ^ 0.decorator_list.0.attr_loc"
+            " ~~~   0.decorator_list.0.value.loc"
+            "  ^    0.decorator_list.0.value.dot_loc"
+            "   ^   0.decorator_list.0.value.attr_loc"
+            " ^     0.decorator_list.0.value.value.loc"
+            "~~~~~~~~~~~~~~~~~~~~~~ 0.loc",
+            validate_if=lambda: sys.version_info >= (3, 0))
+
     #
     # FUNCTION AND LAMBDA ARGUMENTS
     #

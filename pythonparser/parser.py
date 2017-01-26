@@ -546,17 +546,26 @@ class Parser:
         """eval_input: testlist NEWLINE* ENDMARKER"""
         return ast.Expression(body=[expr], loc=expr.loc)
 
-    @action(Seq(Loc("@"), Rule("dotted_name"),
+    @action(Seq(Loc("@"), List(Tok("ident"), ".", trailing=False),
                 Opt(BeginEnd("(", Opt(Rule("arglist")), ")",
                              empty=_empty_arglist)),
                 Loc("newline")))
-    def decorator(self, at_loc, dotted_name, call_opt, newline_loc):
+    def decorator(self, at_loc, idents, call_opt, newline_loc):
         """decorator: '@' dotted_name [ '(' [arglist] ')' ] NEWLINE"""
-        name_loc, name = dotted_name
-        expr = ast.Name(id=name, ctx=None, loc=name_loc)
+        root = idents[0]
+        dec_loc = root.loc
+        expr = ast.Name(id=root.value, ctx=None, loc=root.loc)
+        for ident in idents[1:]:
+          dot_loc = ident.loc.begin()
+          dot_loc.begin_pos -= 1
+          dec_loc = dec_loc.join(ident.loc)
+          expr = ast.Attribute(value=expr, attr=ident.value, ctx=None,
+                               loc=expr.loc.join(ident.loc),
+                               attr_loc=ident.loc, dot_loc=dot_loc)
+
         if call_opt:
             call_opt.func = expr
-            call_opt.loc = name_loc.join(call_opt.loc)
+            call_opt.loc = dec_loc.join(call_opt.loc)
             expr = call_opt
         return at_loc, expr
 

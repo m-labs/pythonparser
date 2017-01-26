@@ -138,7 +138,10 @@ class ParserTestCase(unittest.TestCase):
                              flat_ast)
             self.match_loc(ast, loc_matcher, ast_slicer)
 
-            if version == sys.version_info[0:2] and validate_if():
+            compatible_pyast_version = \
+                (sys.version_info[0:2] == (2, 7) or
+                 sys.version_info[0:2] == (3, 4))
+            if compatible_pyast_version and version == sys.version_info[0:2] and validate_if():
                 python_ast = pyast.parse(code.replace("·", "\n") + "\n")
                 flat_python_ast = self.flatten_python_ast(python_ast)
                 self.assertEqual({"ty": "Module", "body": expected_flat_ast},

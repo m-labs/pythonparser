@@ -2,6 +2,7 @@
 __pycache__/
 _build/
 *.egg-info/
+/.eggs/
 /build/
 /dist/
 /pythonparser/coverage/parser.py

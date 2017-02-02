@@ -57,6 +57,15 @@ class commonloc(object):
                            self._reprfields()))
         return "%s(%s)" % (self.__class__.__name__, fields)
 
+    # Compat with stdlib
+    @property
+    def lineno(self):
+        return self.loc
+    @lineno.setter
+    def lineno(self, value):
+        self.loc = value
+
+
 class keywordloc(commonloc):
     """
     A mixin common for all keyword statements, e.g. ``pass`` and ``yield expr``.

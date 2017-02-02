@@ -238,7 +238,7 @@ class AST_Tests(unittest.TestCase):
         mod = ast.parse("from __future__ import division")
         self.assertIsInstance(mod.body[0], ast.ImportFrom)
         mod.body[0].module = " __future__ ".strip()
-        compile(mod, "<test>", "exec")
+        compile(unicode(mod), "<test>", "exec")
 
     def test_base_classes(self):
         self.assertTrue(issubclass(ast.For, ast.stmt))

@@ -50,9 +50,6 @@ def dump(node, annotate_fields=True, include_attributes=False):
     return _format(node)
 
 
-def load():
-    raise NotImplementedError()
-
 def get_docstring(node, clean=True):
     """
     From: https://github.com/python/cpython/blob/2.7/Lib/ast.py
@@ -70,6 +67,7 @@ def get_docstring(node, clean=True):
             return inspect.cleandoc(node.body[0].value.s)
         return node.body[0].value.s
 
+
 def _walk(node):
     """
     From: https://github.com/python/cpython/blob/2.7/Lib/ast.py
@@ -84,6 +82,7 @@ def _walk(node):
         node = todo.popleft()
         todo.extend(iter_child_nodes(node))
         yield node
+
 
 def increment_lineno(node, n=1):
     """

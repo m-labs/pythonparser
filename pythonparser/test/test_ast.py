@@ -1,7 +1,7 @@
 import sys, itertools, unittest
 from test import test_support
 
-import pythonparser as ast
+import pythonparser.compat_ast as ast
 
 
 def to_tuple(t):

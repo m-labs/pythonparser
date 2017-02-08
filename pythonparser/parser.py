@@ -903,7 +903,12 @@ class Parser:
         return ast.Print(dest=dest, values=values, nl=nl,
                          dest_loc=dest_loc, loc=loc)
 
-    @action(Seq(Loc("print"), Alt(print_stmt_1, print_stmt_2)))
+    @action(Eps())
+    def print_stmt_3(self, eps):
+        return ast.Print(dest=None, values=[], nl=True,
+                         dest_loc=None, loc=None)
+
+    @action(Seq(Loc("print"), Alt(print_stmt_1, print_stmt_2, print_stmt_3)))
     def print_stmt(self, print_loc, stmt):
         """
         (2.6-2.7)
@@ -911,7 +916,10 @@ class Parser:
                               '>>' test [ (',' test)+ [','] ] )
         """
         stmt.keyword_loc = print_loc
-        stmt.loc = print_loc.join(stmt.loc)
+        if stmt.loc is None:
+            stmt.loc = print_loc
+        else:
+            stmt.loc = print_loc.join(stmt.loc)
         return stmt
 
     @action(Seq(Loc("del"), List(Rule("expr"), ",", trailing=True)))

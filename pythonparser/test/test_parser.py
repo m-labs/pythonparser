@@ -1071,6 +1071,13 @@ class ParserTestCase(unittest.TestCase):
 
     def test_print(self):
         self.assertParsesSuite(
+            [{"ty": "Print", "dest": None, "values": [], "nl": True}],
+            "print",
+            "~~~~~ 0.keyword_loc"
+            "~~~~~ 0.loc",
+            only_if=lambda ver: ver < (3, 0))
+
+        self.assertParsesSuite(
             [{"ty": "Print", "dest": None, "values": [self.ast_1], "nl": True}],
             "print 1",
             "~~~~~ 0.keyword_loc"

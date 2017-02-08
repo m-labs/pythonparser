@@ -836,6 +836,16 @@ class ParserTestCase(unittest.TestCase):
             "~~~~~~ loc")
 
         self.assertParsesExpr(
+            {"ty": "Call", "func": self.ast_x, "starargs": None, "kwargs": self.ast_z,
+             "args": [self.ast_1], "keywords": []},
+            "x(1, **z)")
+
+        self.assertParsesExpr(
+            {"ty": "Call", "func": self.ast_x, "starargs": None, "kwargs": None,
+             "args": [self.ast_1, self.ast_2], "keywords": []},
+            "x(1, 2,)")
+
+        self.assertParsesExpr(
             {"ty": "Call", "func": self.ast_x, "starargs": None, "kwargs": None,
              "keywords": [], "args": [
                 {"ty": "GeneratorExp", "elt": self.ast_y, "generators": [

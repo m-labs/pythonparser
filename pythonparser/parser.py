@@ -1805,13 +1805,9 @@ class Parser:
                             name_loc=name_tok.loc, colon_loc=colon_loc,
                             loc=class_loc.join(body[-1].loc))
 
-    @action(Rule("argument"))
-    def arglist_1(self, arg):
-        return [arg], self._empty_arglist()
-
     @action(Seq(Loc("*"), Rule("test"), Star(SeqN(1, Tok(","), Rule("argument"))),
                 Opt(Seq(Tok(","), Loc("**"), Rule("test")))))
-    def arglist_2(self, star_loc, stararg, postargs, kwarg_opt):
+    def arglist_1(self, star_loc, stararg, postargs, kwarg_opt):
         dstar_loc = kwarg = None
         if kwarg_opt:
             _, dstar_loc, kwarg = kwarg_opt
@@ -1828,31 +1824,32 @@ class Parser:
                         star_loc=star_loc, dstar_loc=dstar_loc, loc=None)
 
     @action(Seq(Loc("**"), Rule("test")))
-    def arglist_3(self, dstar_loc, kwarg):
+    def arglist_2(self, dstar_loc, kwarg):
         return [], \
                ast.Call(args=[], keywords=[], starargs=None, kwargs=kwarg,
                         star_loc=None, dstar_loc=dstar_loc, loc=None)
 
-    @action(SeqN(0, Rule("argument"), Tok(",")))
-    def arglist_4(self, arg):
-        return [], ([arg], self._empty_arglist())
+    @action(Seq(Rule("argument"),
+                Alt(SeqN(1, Tok(","), Alt(Rule("arglist_1"),
+                                          Rule("arglist_2"),
+                                          Rule("arglist_3"),
+                                          Eps())),
+                    Eps())))
+    def arglist_3(self, arg, cont):
+        if cont is None:
+            return [arg], self._empty_arglist()
+        else:
+            args, rest = cont
+            return [arg] + args, rest
 
-    @action(Alt(Seq(Star(SeqN(0, Rule("argument"), Tok(","))),
-                    Alt(arglist_1, arglist_2, arglist_3)),
-                arglist_4))
-    def arglist(self, pre_args, rest):
-        # Python's grammar is very awkwardly formulated here in a way
-        # that is not easily amenable to our combinator approach.
-        # Thus it is changed to the equivalent:
-        #
-        #     arglist: (argument ',')* ( argument | ... ) | argument ','
-        #
+    @action(Alt(Rule("arglist_1"),
+                Rule("arglist_2"),
+                Rule("arglist_3")))
+    def arglist(self, args, call):
         """arglist: (argument ',')* (argument [','] |
                                      '*' test (',' argument)* [',' '**' test] |
                                      '**' test)"""
-        post_args, call = rest
-
-        for arg in pre_args + post_args:
+        for arg in args:
             if isinstance(arg, ast.keyword):
                 call.keywords.append(arg)
             elif len(call.keywords) > 0:

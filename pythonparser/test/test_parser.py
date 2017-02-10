@@ -262,7 +262,7 @@ class ParserTestCase(unittest.TestCase):
             "     ^ end_loc",
             # Python 3.4 for some reason produces a Bytes node where all other
             # known versions produce Str.
-            validate_if=lambda: sys.version_info != (3, 4))
+            validate_if=lambda: sys.version_info[:2] != (3, 4))
 
         self.assertParsesExpr(
             {"ty": "Str", "s": BytesOnly(b"foo")},

@@ -421,14 +421,16 @@ class Lexer:
                           "strend"))
 
     def _replace_escape(self, range, mode, value):
+        is_raw     = ("r" in mode)
         is_unicode = "u" in mode or ("b" not in mode and self.unicode_literals)
+
         if not is_unicode:
             value = value.encode(self.source_buffer.encoding)
-            if "r" in mode:
+            if is_raw:
                 return value
             return self._replace_escape_bytes(value)
 
-        if "r" in mode:
+        if is_raw:
             return value
 
         return self._replace_escape_unicode(range, value)
@@ -449,24 +451,24 @@ class Lexer:
 
             # Process the escape
             if match.group(1) is not None: # single-char
-                c = match.group(1)
-                if c == "\n":
+                chr = match.group(1)
+                if chr == "\n":
                     pass
-                elif c == "\\" or c == "'" or c == "\"":
-                    chunks.append(c)
-                elif c == "a":
+                elif chr == "\\" or chr == "'" or chr == "\"":
+                    chunks.append(chr)
+                elif chr == "a":
                     chunks.append("\a")
-                elif c == "b":
+                elif chr == "b":
                     chunks.append("\b")
-                elif c == "f":
+                elif chr == "f":
                     chunks.append("\f")
-                elif c == "n":
+                elif chr == "n":
                     chunks.append("\n")
-                elif c == "r":
+                elif chr == "r":
                     chunks.append("\r")
-                elif c == "t":
+                elif chr == "t":
                     chunks.append("\t")
-                elif c == "v":
+                elif chr == "v":
                     chunks.append("\v")
             elif match.group(2) is not None: # oct
                 chunks.append(unichr(int(match.group(2), 8)))
@@ -513,24 +515,24 @@ class Lexer:
 
             # Process the escape
             if match.group(1) is not None: # single-char
-                c = match.group(1)
-                if c == b"\n":
+                chr = match.group(1)
+                if chr == b"\n":
                     pass
-                elif c == b"\\" or c == b"'" or c == b"\"":
-                    chunks.append(c)
-                elif c == b"a":
+                elif chr == b"\\" or chr == b"'" or chr == b"\"":
+                    chunks.append(chr)
+                elif chr == b"a":
                     chunks.append(b"\a")
-                elif c == b"b":
+                elif chr == b"b":
                     chunks.append(b"\b")
-                elif c == b"f":
+                elif chr == b"f":
                     chunks.append(b"\f")
-                elif c == b"n":
+                elif chr == b"n":
                     chunks.append(b"\n")
-                elif c == b"r":
+                elif chr == b"r":
                     chunks.append(b"\r")
-                elif c == b"t":
+                elif chr == b"t":
                     chunks.append(b"\t")
-                elif c == b"v":
+                elif chr == b"v":
                     chunks.append(b"\v")
             elif match.group(2) is not None: # oct
                 chunks.append(byte(int(match.group(2), 8)))

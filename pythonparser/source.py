@@ -70,16 +70,26 @@ class Buffer:
                 return self._line_begins
             self._line_begins.append(index)
 
-    _encoding_re = re.compile(b"^[ \t\v]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
+    _encoding_re = re.compile("^[ \t\v]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
+    _encoding_bytes_re = re.compile(_encoding_re.pattern.encode())
 
     def _extract_encoding(self, source):
-        match = self._encoding_re.match(source)
+        if isinstance(source, bytes):
+            re = self._encoding_bytes_re
+            nl = b"\n"
+        else:
+            re = self._encoding_re
+            nl = "\n"
+        match = re.match(source)
         if not match:
-            index = source.find(b"\n")
+            index = source.find(nl)
             if index != -1:
-                match = self._encoding_re.match(source[index + 1:])
+                match = re.match(source[index + 1:])
         if match:
-            return match.group(1)
+            encoding = match.group(1)
+            if isinstance(encoding, bytes):
+                return encoding.decode("ascii")
+            return encoding
         return "ascii"
 
 

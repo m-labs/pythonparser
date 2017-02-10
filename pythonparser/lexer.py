@@ -10,6 +10,9 @@ import sys
 
 if sys.version_info[0] == 3:
     unichr = chr
+    byte = lambda x: bytes([x])
+else:
+    byte = chr
 
 class Token:
     """
@@ -185,23 +188,22 @@ class Lexer:
                    id_xid=id_xid), re.VERBOSE|re.UNICODE)
 
     # These are identical for all lexer instances.
-    _lex_escape_re = re.compile(r"""
+    _lex_escape_pattern = r"""
     \\(?:
         ([\n\\'"abfnrtv]) # 1 single-char
     |   ([0-7]{1,3})      # 2 oct
     |   x([0-9A-Fa-f]{2}) # 3 hex
     )
-    """, re.VERBOSE)
+    """
+    _lex_escape_re = re.compile(_lex_escape_pattern.encode(), re.VERBOSE)
 
-    _lex_escape_unicode_re = re.compile(_lex_escape_re.pattern + r"""
+    _lex_escape_unicode_re = re.compile(_lex_escape_pattern + r"""
     | \\(?:
         u([0-9A-Fa-f]{4}) # 4 unicode-16
     |   U([0-9A-Fa-f]{8}) # 5 unicode-32
     |   N\{(.+?)\}        # 6 unicode-name
     )
     """, re.VERBOSE)
-
-    _lex_check_byte_re = re.compile("[^\x00-\x7f]")
 
     def next(self, eof_token=False):
         """
@@ -421,26 +423,10 @@ class Lexer:
     def _replace_escape(self, range, mode, value):
         is_unicode = "u" in mode or ("b" not in mode and self.unicode_literals)
         if not is_unicode:
-            if isinstance(value, unicode):
-                try:
-                    value = value.encode(self.source_buffer.encoding)
-                except UnicodeEncodeError:
-                    msg = "invalid literal for {} encoding".format(
-                            self.source_buffer.encoding)
-                    error = diagnostic.Diagnostic("error", msg, {}, range)
-                    self.diagnostic_engine.process(error)
+            value = value.encode(self.source_buffer.encoding)
             if "r" in mode:
                 return value
             return self._replace_escape_bytes(value)
-
-        if not isinstance(value, unicode):
-            try:
-                value = value.decode(self.source_buffer.encoding)
-            except UnicodeDecodeError:
-                msg = "invalid literal for {} encoding".format(
-                        self.source_buffer.encoding)
-                error = diagnostic.Diagnostic("error", msg, {}, range)
-                self.diagnostic_engine.process(error)
 
         if "r" in mode:
             return value
@@ -448,8 +434,6 @@ class Lexer:
         return self._replace_escape_unicode(range, value)
 
     def _replace_escape_unicode(self, range, value):
-        assert isinstance(value, unicode)
-
         chunks = []
         offset = 0
         while offset < len(value):
@@ -514,8 +498,6 @@ class Lexer:
         return "".join(chunks)
 
     def _replace_escape_bytes(self, value):
-        assert isinstance(value, bytes)
-
         chunks = []
         offset = 0
         while offset < len(value):
@@ -531,29 +513,29 @@ class Lexer:
 
             # Process the escape
             if match.group(1) is not None: # single-char
-                c = match.group(1).decode('ascii')
-                if c == "\n":
+                c = match.group(1)
+                if c == b"\n":
                     pass
-                elif c == "\\" or c == "'" or c == "\"":
+                elif c == b"\\" or c == b"'" or c == b"\"":
                     chunks.append(c)
-                elif c == "a":
+                elif c == b"a":
                     chunks.append(b"\a")
-                elif c == "b":
+                elif c == b"b":
                     chunks.append(b"\b")
-                elif c == "f":
+                elif c == b"f":
                     chunks.append(b"\f")
-                elif c == "n":
+                elif c == b"n":
                     chunks.append(b"\n")
-                elif c == "r":
+                elif c == b"r":
                     chunks.append(b"\r")
-                elif c == "t":
+                elif c == b"t":
                     chunks.append(b"\t")
-                elif c == "v":
+                elif c == b"v":
                     chunks.append(b"\v")
             elif match.group(2) is not None: # oct
-                chunks.append(chr(int(match.group(2), 8)))
+                chunks.append(byte(int(match.group(2), 8)))
             elif match.group(3) is not None: # hex
-                chunks.append(chr(int(match.group(3), 16)))
+                chunks.append(byte(int(match.group(3), 16)))
 
         return b"".join(chunks)
 

@@ -1,28 +1,19 @@
 # coding:utf-8
 
 from __future__ import absolute_import, division, print_function, unicode_literals
+from . import test_utils
 from .. import source, lexer, diagnostic, ast, coverage
 from ..coverage import parser
 import unittest, sys, re, ast as pyast
+
+BytesOnly = test_utils.BytesOnly
+UnicodeOnly = test_utils.UnicodeOnly
 
 if sys.version_info >= (3,):
     def unicode(x): return x
 
 def tearDownModule():
     coverage.report(parser)
-
-class StrictCompare(object):
-    def __init__(self, o):
-        self.o = o
-
-    def __repr__(self):
-        return "StrictCompare({!r})".format(self.o)
-
-    def __eq__(self, o):
-        return (type(self.o), self.o) == (type(o), o)
-
-    def __ne__(self, o):
-        return not (self == o)
 
 class ParserTestCase(unittest.TestCase):
 
@@ -257,29 +248,37 @@ class ParserTestCase(unittest.TestCase):
             "'foo'",
             "~~~~~ loc"
             "^ begin_loc"
-            "    ^ end_loc")
+            "    ^ end_loc",
+            only_if=lambda ver: ver >= (3,))
+        self.assertParsesExpr(
+            {"ty": "Str", "s": BytesOnly("foo")}, "'foo'",
+            only_if=lambda ver: ver < (3,))
 
         self.assertParsesExpr(
-            {"ty": "Str", "s": StrictCompare(b"foo")},
+            {"ty": "Str", "s": BytesOnly(b"foo")},
             "b'foo'",
             "~~~~~~ loc"
             "~~ begin_loc"
             "     ^ end_loc")
 
         self.assertParsesExpr(
-            {"ty": "Str", "s": StrictCompare(b"foo")},
+            {"ty": "Str", "s": BytesOnly(b"foo")},
             "'foo'",
             "~~~~~ loc"
             "^ begin_loc"
             "    ^ end_loc",
-            only_if=lambda ver: ver < (3, 0))
+            only_if=lambda ver: ver < (3,))
 
         self.assertParsesExpr(
             {"ty": "Str", "s": "foobar"},
             "'foo' 'bar'",
             "~~~~~~~~~~~ loc"
             "^ begin_loc"
-            "          ^ end_loc")
+            "          ^ end_loc",
+            only_if=lambda ver: ver >= (3,))
+        self.assertParsesExpr(
+            {"ty": "Str", "s": BytesOnly("foobar")}, "'foo' 'bar'",
+            only_if=lambda ver: ver < (3,))
 
     def test_ident(self):
         self.assertParsesExpr(
@@ -1990,7 +1989,7 @@ class ParserTestCase(unittest.TestCase):
             [{"ty": "ImportFrom",
               "names": [{"ty": "alias", "name": "unicode_literals", "asname": None}],
               "module": "__future__", "level": 0},
-             {"ty": "Expr", "value": {"ty": "Str", "s": StrictCompare("foo")}}],
+             {"ty": "Expr", "value": {"ty": "Str", "s": UnicodeOnly("foo")}}],
             "from __future__ import unicode_literals·'foo'",
             only_if=lambda ver: ver < (3, 0))
 
@@ -1998,7 +1997,7 @@ class ParserTestCase(unittest.TestCase):
         # affects subsequent string literals in pythonparser, whereas in ast it
         # affects all string literals in the file.
         self.assertParsesGen(
-            [{"ty": "Expr", "value": {"ty": "Str", "s": StrictCompare(b"foo")}},
+            [{"ty": "Expr", "value": {"ty": "Str", "s": BytesOnly(b"foo")}},
              {"ty": "ImportFrom",
               "names": [{"ty": "alias", "name": "unicode_literals", "asname": None}],
               "module": "__future__", "level": 0}],

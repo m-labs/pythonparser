@@ -28,6 +28,13 @@ class BufferTestCase(unittest.TestCase):
         self.assertEqual((2, 0),
                          source.Buffer("\n").decompose_position(1))
 
+    def test_encoding(self):
+        self.assertEqual("ascii", source.Buffer("\n").encoding)
+        self.assertEqual("ascii", source.Buffer("coding: wut").encoding)
+        self.assertEqual("ascii", source.Buffer("\n\n# coding: wut").encoding)
+        self.assertEqual("utf-8", source.Buffer("# coding=utf-8").encoding)
+        self.assertEqual("iso-8859-1", source.Buffer("\n# -*- coding: iso-8859-1 -*-").encoding)
+
 
 class RangeTestCase(unittest.TestCase):
 

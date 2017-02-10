@@ -11,6 +11,19 @@ if sys.version_info >= (3,):
 def tearDownModule():
     coverage.report(parser)
 
+class StrictCompare(object):
+    def __init__(self, o):
+        self.o = o
+
+    def __repr__(self):
+        return "StrictCompare({!r})".format(self.o)
+
+    def __eq__(self, o):
+        return (type(self.o), self.o) == (type(o), o)
+
+    def __ne__(self, o):
+        return not (self == o)
+
 class ParserTestCase(unittest.TestCase):
 
     maxDiff = None
@@ -245,6 +258,21 @@ class ParserTestCase(unittest.TestCase):
             "~~~~~ loc"
             "^ begin_loc"
             "    ^ end_loc")
+
+        self.assertParsesExpr(
+            {"ty": "Str", "s": StrictCompare(b"foo")},
+            "b'foo'",
+            "~~~~~~ loc"
+            "~~ begin_loc"
+            "     ^ end_loc")
+
+        self.assertParsesExpr(
+            {"ty": "Str", "s": StrictCompare(b"foo")},
+            "'foo'",
+            "~~~~~ loc"
+            "^ begin_loc"
+            "    ^ end_loc",
+            only_if=lambda ver: ver < (3, 0))
 
         self.assertParsesExpr(
             {"ty": "Str", "s": "foobar"},
@@ -1956,6 +1984,27 @@ class ParserTestCase(unittest.TestCase):
                 {"ty": "Call", "func": {"ty": "Name", "id": "print", "ctx": None},
                  "starargs": None, "kwargs": None, "args": [self.ast_x], "keywords": []}}],
             "from __future__ import print_function·print(x)")
+
+    def test_future_unicode_literals(self):
+        self.assertParsesGen(
+            [{"ty": "ImportFrom",
+              "names": [{"ty": "alias", "name": "unicode_literals", "asname": None}],
+              "module": "__future__", "level": 0},
+             {"ty": "Expr", "value": {"ty": "Str", "s": StrictCompare("foo")}}],
+            "from __future__ import unicode_literals·'foo'",
+            only_if=lambda ver: ver < (3, 0))
+
+        # This test does not validate because unicode_literals import only
+        # affects subsequent string literals in pythonparser, whereas in ast it
+        # affects all string literals in the file.
+        self.assertParsesGen(
+            [{"ty": "Expr", "value": {"ty": "Str", "s": StrictCompare(b"foo")}},
+             {"ty": "ImportFrom",
+              "names": [{"ty": "alias", "name": "unicode_literals", "asname": None}],
+              "module": "__future__", "level": 0}],
+            "'foo'·from __future__ import unicode_literals",
+            only_if=lambda ver: ver == (2, 7), validate_if=lambda: False)
+
 
     #
     # DIAGNOSTICS

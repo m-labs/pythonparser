@@ -189,6 +189,26 @@ class LexerTestCase(unittest.TestCase):
                          "strdata",  "\x00 \x08 \x08",
                          "strend",   None)
 
+        self.assertLexesVersions(r"b'\xc3\xa7'", [(2,7), (3,0), (3,1)],
+                                 "strbegin", "b",
+                                 "strdata",  b"\xc3\xa7",
+                                 "strend",   None)
+
+        self.assertLexesVersions(b"# coding: koi8-r\nb'\xc3\xa7'", [(2,7), (3,0), (3,1)],
+                                 "strbegin", "b",
+                                 "strdata",  b"\xc3\xa7",
+                                 "strend",   None)
+
+        self.assertLexesVersions(b"# coding: koi8-r\n'\xc3\xa7'", [(3,0), (3,1)],
+                                 "strbegin", "",
+                                 "strdata",  "\u0446\u2556",
+                                 "strend",   None)
+
+        self.assertLexesVersions(b"# coding: koi8-r\nu'\xc3\xa7'", [(2,7)],
+                                 "strbegin", "u",
+                                 "strdata",  "\u0446\u2556",
+                                 "strend",   None)
+
         self.assertDiagnoses(
                          "'",
                          [("fatal", "unterminated string", (0, 1))])

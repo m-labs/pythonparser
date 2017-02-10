@@ -7,6 +7,7 @@ location information and original source from a range.
 
 from __future__ import absolute_import, division, print_function, unicode_literals
 import bisect
+import regex as re
 
 class Buffer:
     """
@@ -18,7 +19,11 @@ class Buffer:
     :ivar line: (integer) first line of the input
     """
     def __init__(self, source, name="<input>", first_line=1):
-        self.source = source
+        self.encoding = self._extract_encoding(source)
+        if isinstance(source, bytes):
+            self.source = source.decode(self.encoding)
+        else:
+            self.source = source
         self.name = name
         self.first_line = first_line
         self._line_begins = None
@@ -64,6 +69,19 @@ class Buffer:
             if index == 0:
                 return self._line_begins
             self._line_begins.append(index)
+
+    _encoding_re = re.compile(b"^[ \t\v]*#.*?coding[:=][ \t]*([-_.a-zA-Z0-9]+)")
+
+    def _extract_encoding(self, source):
+        match = self._encoding_re.match(source)
+        if not match:
+            index = source.find(b"\n")
+            if index != -1:
+                match = self._encoding_re.match(source[index + 1:])
+        if match:
+            return match.group(1)
+        return "ascii"
+
 
 class Range:
     """

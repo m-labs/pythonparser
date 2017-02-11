@@ -1,8 +1,12 @@
 # coding:utf-8
 
 from __future__ import absolute_import, division, print_function, unicode_literals
+from . import test_utils
 from .. import source, lexer, diagnostic
 import unittest
+
+BytesOnly = test_utils.BytesOnly
+UnicodeOnly = test_utils.UnicodeOnly
 
 class LexerTestCase(unittest.TestCase):
 
@@ -152,42 +156,67 @@ class LexerTestCase(unittest.TestCase):
                          "int", 123)
 
     def test_string_literal(self):
-        self.assertLexes("''",
-                         "strbegin", "",
-                         "strdata",  "",
-                         "strend",   None)
-        self.assertLexes("''''''",
-                         "strbegin", "",
-                         "strdata",  "",
-                         "strend",   None)
-        self.assertLexes("\"\"",
-                         "strbegin", "",
-                         "strdata",  "",
-                         "strend",   None)
-        self.assertLexes("\"\"\"\"\"\"",
-                         "strbegin", "",
-                         "strdata",  "",
-                         "strend",   None)
+        for version in self.VERSIONS:
+            if version < (3,):
+                str_type = BytesOnly
+            else:
+                str_type = UnicodeOnly
+            self.assertLexesVersions("''", [version],
+                                     "strbegin", "",
+                                     "strdata",  str_type(""),
+                                     "strend",   None)
+            self.assertLexesVersions("''''''", [version],
+                                     "strbegin", "",
+                                     "strdata",  str_type(""),
+                                     "strend",   None)
+            self.assertLexesVersions("\"\"", [version],
+                                     "strbegin", "",
+                                     "strdata",  str_type(""),
+                                     "strend",   None)
+            self.assertLexesVersions("\"\"\"\"\"\"", [version],
+                                     "strbegin", "",
+                                     "strdata",  str_type(""),
+                                     "strend",   None)
 
-        self.assertLexes("'x'",
-                         "strbegin", "",
-                         "strdata",  "x",
-                         "strend",   None)
+            self.assertLexesVersions("'x'", [version],
+                                     "strbegin", "",
+                                     "strdata",  str_type("x"),
+                                     "strend",   None)
 
-        self.assertLexes("'''\n'''",
-                         "strbegin", "",
-                         "strdata",  "\n",
-                         "strend",   None)
+            self.assertLexesVersions("'''\n'''", [version],
+                                     "strbegin", "",
+                                     "strdata",  str_type("\n"),
+                                     "strend",   None)
 
-        self.assertLexes("'''\n'''",
-                         "strbegin", "",
-                         "strdata",  "\n",
-                         "strend",   None)
+            self.assertLexesVersions("'''\n'''", [version],
+                                     "strbegin", "",
+                                     "strdata",  str_type("\n"),
+                                     "strend",   None)
 
-        self.assertLexes(r"'\0 \10 \010'",
-                         "strbegin", "",
-                         "strdata",  "\x00 \x08 \x08",
-                         "strend",   None)
+            self.assertLexesVersions(r"'\0 \10 \010'", [version],
+                                     "strbegin", "",
+                                     "strdata",  str_type("\x00 \x08 \x08"),
+                                     "strend",   None)
+
+        self.assertLexesVersions(r"b'\xc3\xa7'", [(2,7), (3,0), (3,1)],
+                                 "strbegin", "b",
+                                 "strdata",  BytesOnly(b"\xc3\xa7"),
+                                 "strend",   None)
+
+        self.assertLexesVersions(b"# coding: koi8-r\nb'\xc3\xa7'", [(2,7), (3,0), (3,1)],
+                                 "strbegin", "b",
+                                 "strdata",  BytesOnly(b"\xc3\xa7"),
+                                 "strend",   None)
+
+        self.assertLexesVersions(b"# coding: koi8-r\n'\xc3\xa7'", [(3,0), (3,1)],
+                                 "strbegin", "",
+                                 "strdata",  UnicodeOnly("\u0446\u2556"),
+                                 "strend",   None)
+
+        self.assertLexesVersions(b"# coding: koi8-r\nu'\xc3\xa7'", [(2,7)],
+                                 "strbegin", "u",
+                                 "strdata",  UnicodeOnly("\u0446\u2556"),
+                                 "strend",   None)
 
         self.assertDiagnoses(
                          "'",
@@ -211,12 +240,13 @@ class LexerTestCase(unittest.TestCase):
                 (r"\a", "\a"), (r"\b", "\b"), (r"\f", "\f"), (r"\n", "\n"),
                 (r"\r", "\r"), (r"\t", "\t"), (r"\v", "\v"),
                 (r"\x53", "S"), (r"\123", "S")]:
-            for mode in [ "", "u", "b" ]:
-                self.assertLexesEscape(mode, chr, val)
-            for mode in [ "r", "br" ]:
-                self.assertLexesEscape(mode, chr, chr)
+            self.assertLexesEscape("b", chr, BytesOnly(val))
+            self.assertLexesEscape("u", chr, UnicodeOnly(val))
+            self.assertLexesEscape("", chr, UnicodeOnly(val))
+            self.assertLexesEscape("r", chr, UnicodeOnly(chr))
+            self.assertLexesEscape("br", chr, BytesOnly(chr))
 
-        self.assertLexesEscape("r", "\\\"", "\\\"")
+        self.assertLexesEscape("r", "\\\"", UnicodeOnly("\\\""))
 
     def test_escape_unicode(self):
         self.assertLexesEscape("u", "\\u044b", "ы")

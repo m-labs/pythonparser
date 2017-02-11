@@ -1,9 +1,13 @@
 # coding:utf-8
 
 from __future__ import absolute_import, division, print_function, unicode_literals
+from . import test_utils
 from .. import source, lexer, diagnostic, ast, coverage
 from ..coverage import parser
 import unittest, sys, re, ast as pyast
+
+BytesOnly = test_utils.BytesOnly
+UnicodeOnly = test_utils.UnicodeOnly
 
 if sys.version_info >= (3,):
     def unicode(x): return x
@@ -244,14 +248,40 @@ class ParserTestCase(unittest.TestCase):
             "'foo'",
             "~~~~~ loc"
             "^ begin_loc"
-            "    ^ end_loc")
+            "    ^ end_loc",
+            only_if=lambda ver: ver >= (3,))
+        self.assertParsesExpr(
+            {"ty": "Str", "s": BytesOnly("foo")}, "'foo'",
+            only_if=lambda ver: ver < (3,))
+
+        self.assertParsesExpr(
+            {"ty": "Str", "s": BytesOnly(b"foo")},
+            "b'foo'",
+            "~~~~~~ loc"
+            "~~ begin_loc"
+            "     ^ end_loc",
+            # Python 3.4 for some reason produces a Bytes node where all other
+            # known versions produce Str.
+            validate_if=lambda: sys.version_info[:2] != (3, 4))
+
+        self.assertParsesExpr(
+            {"ty": "Str", "s": BytesOnly(b"foo")},
+            "'foo'",
+            "~~~~~ loc"
+            "^ begin_loc"
+            "    ^ end_loc",
+            only_if=lambda ver: ver < (3,))
 
         self.assertParsesExpr(
             {"ty": "Str", "s": "foobar"},
             "'foo' 'bar'",
             "~~~~~~~~~~~ loc"
             "^ begin_loc"
-            "          ^ end_loc")
+            "          ^ end_loc",
+            only_if=lambda ver: ver >= (3,))
+        self.assertParsesExpr(
+            {"ty": "Str", "s": BytesOnly("foobar")}, "'foo' 'bar'",
+            only_if=lambda ver: ver < (3,))
 
     def test_ident(self):
         self.assertParsesExpr(
@@ -1956,6 +1986,27 @@ class ParserTestCase(unittest.TestCase):
                 {"ty": "Call", "func": {"ty": "Name", "id": "print", "ctx": None},
                  "starargs": None, "kwargs": None, "args": [self.ast_x], "keywords": []}}],
             "from __future__ import print_function·print(x)")
+
+    def test_future_unicode_literals(self):
+        self.assertParsesGen(
+            [{"ty": "ImportFrom",
+              "names": [{"ty": "alias", "name": "unicode_literals", "asname": None}],
+              "module": "__future__", "level": 0},
+             {"ty": "Expr", "value": {"ty": "Str", "s": UnicodeOnly("foo")}}],
+            "from __future__ import unicode_literals·'foo'",
+            only_if=lambda ver: ver < (3, 0))
+
+        # This test does not validate because unicode_literals import only
+        # affects subsequent string literals in pythonparser, whereas in ast it
+        # affects all string literals in the file.
+        self.assertParsesGen(
+            [{"ty": "Expr", "value": {"ty": "Str", "s": BytesOnly(b"foo")}},
+             {"ty": "ImportFrom",
+              "names": [{"ty": "alias", "name": "unicode_literals", "asname": None}],
+              "module": "__future__", "level": 0}],
+            "'foo'·from __future__ import unicode_literals",
+            only_if=lambda ver: ver == (2, 7), validate_if=lambda: False)
+
 
     #
     # DIAGNOSTICS

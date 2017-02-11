@@ -520,6 +520,8 @@ class Parser:
     def add_flags(self, flags):
         if "print_function" in flags:
             self.lexer.print_function = True
+        if "unicode_literals" in flags:
+            self.lexer.unicode_literals = True
 
     # Grammar
     @action(Expect(Alt(Newline(),
@@ -1522,7 +1524,10 @@ class Parser:
 
     @action(Plus(atom_4))
     def atom_5(self, strings):
-        return ast.Str(s="".join([x.s for x in strings]),
+        joint = ""
+        if all(isinstance(x.s, bytes) for x in strings):
+            joint = b""
+        return ast.Str(s=joint.join([x.s for x in strings]),
                        begin_loc=strings[0].begin_loc, end_loc=strings[-1].end_loc,
                        loc=strings[0].loc.join(strings[-1].loc))
 

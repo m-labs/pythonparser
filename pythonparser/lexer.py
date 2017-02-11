@@ -10,6 +10,9 @@ import sys
 
 if sys.version_info[0] == 3:
     unichr = chr
+    byte = lambda x: bytes([x])
+else:
+    byte = chr
 
 class Token:
     """
@@ -105,6 +108,7 @@ class Lexer:
         self.diagnostic_engine = diagnostic_engine
         self.interactive = interactive
         self.print_function = False
+        self.unicode_literals = self.version >= (3, 0)
 
         self.offset = 0
         self.new_line = True
@@ -184,23 +188,22 @@ class Lexer:
                    id_xid=id_xid), re.VERBOSE|re.UNICODE)
 
     # These are identical for all lexer instances.
-    _lex_escape_re = re.compile(r"""
+    _lex_escape_pattern = r"""
     \\(?:
         ([\n\\'"abfnrtv]) # 1 single-char
     |   ([0-7]{1,3})      # 2 oct
     |   x([0-9A-Fa-f]{2}) # 3 hex
     )
-    """, re.VERBOSE)
+    """
+    _lex_escape_re = re.compile(_lex_escape_pattern.encode(), re.VERBOSE)
 
-    _lex_escape_unicode_re = re.compile(_lex_escape_re.pattern + r"""
+    _lex_escape_unicode_re = re.compile(_lex_escape_pattern + r"""
     | \\(?:
         u([0-9A-Fa-f]{4}) # 4 unicode-16
     |   U([0-9A-Fa-f]{8}) # 5 unicode-32
     |   N\{(.+?)\}        # 6 unicode-name
     )
     """, re.VERBOSE)
-
-    _lex_check_byte_re = re.compile("[^\x00-\x7f]")
 
     def next(self, eof_token=False):
         """
@@ -419,27 +422,24 @@ class Lexer:
 
     def _replace_escape(self, range, mode, value):
         is_raw     = ("r" in mode)
-        is_byte    = ("b" in mode)
-        is_unicode = ("u" in mode)
+        is_unicode = "u" in mode or ("b" not in mode and self.unicode_literals)
+
+        if not is_unicode:
+            value = value.encode(self.source_buffer.encoding)
+            if is_raw:
+                return value
+            return self._replace_escape_bytes(value)
 
         if is_raw:
             return value
 
-        if is_byte and self._lex_check_byte_re.match(value):
-            error = diagnostic.Diagnostic(
-                "error", "non-7-bit character in a byte literal", {},
-                tok_range)
-            self.diagnostic_engine.process(error)
+        return self._replace_escape_unicode(range, value)
 
-        if is_unicode or self.version >= (3, 0):
-            re = self._lex_escape_unicode_re
-        else:
-            re = self._lex_escape_re
-
+    def _replace_escape_unicode(self, range, value):
         chunks = []
         offset = 0
         while offset < len(value):
-            match = re.search(value, offset)
+            match = self._lex_escape_unicode_re.search(value, offset)
             if match is None:
                 # Append the remaining of the string
                 chunks.append(value[offset:])
@@ -498,6 +498,48 @@ class Lexer:
                     self.diagnostic_engine.process(error)
 
         return "".join(chunks)
+
+    def _replace_escape_bytes(self, value):
+        chunks = []
+        offset = 0
+        while offset < len(value):
+            match = self._lex_escape_re.search(value, offset)
+            if match is None:
+                # Append the remaining of the string
+                chunks.append(value[offset:])
+                break
+
+            # Append the part of string before match
+            chunks.append(value[offset:match.start()])
+            offset = match.end()
+
+            # Process the escape
+            if match.group(1) is not None: # single-char
+                chr = match.group(1)
+                if chr == b"\n":
+                    pass
+                elif chr == b"\\" or chr == b"'" or chr == b"\"":
+                    chunks.append(chr)
+                elif chr == b"a":
+                    chunks.append(b"\a")
+                elif chr == b"b":
+                    chunks.append(b"\b")
+                elif chr == b"f":
+                    chunks.append(b"\f")
+                elif chr == b"n":
+                    chunks.append(b"\n")
+                elif chr == b"r":
+                    chunks.append(b"\r")
+                elif chr == b"t":
+                    chunks.append(b"\t")
+                elif chr == b"v":
+                    chunks.append(b"\v")
+            elif match.group(2) is not None: # oct
+                chunks.append(byte(int(match.group(2), 8)))
+            elif match.group(3) is not None: # hex
+                chunks.append(byte(int(match.group(3), 16)))
+
+        return b"".join(chunks)
 
     def _check_long_literal(self, range, literal):
         if literal[-1] in "lL" and self.version >= (3, 0):

@@ -11,8 +11,13 @@ UnicodeOnly = test_utils.UnicodeOnly
 class LexerTestCase(unittest.TestCase):
 
     def assertLexesVersions(self, input, versions, *expected_tokens, **kwargs):
+        expect_trailing_nl = True
+        if "expect_trailing_nl" in kwargs:
+            expect_trailing_nl = kwargs.pop("expect_trailing_nl")
         for version in versions:
             tokens = expected_tokens
+            if expect_trailing_nl:
+                tokens += ("newline", None)
             self.buffer = source.Buffer(input)
             self.engine = diagnostic.Engine(all_errors_are_fatal=True)
             self.engine.render_diagnostic = lambda diag: None
@@ -47,27 +52,23 @@ class LexerTestCase(unittest.TestCase):
         self.assertDiagnosesVersions(input, self.VERSIONS, diag, *tokens)
 
     def test_empty(self):
-        self.assertLexes("")
+        self.assertLexes("", expect_trailing_nl=False)
 
     def test_newline(self):
         self.assertLexes("x\n",
-                         "ident",   "x",
-                         "newline", None)
+                         "ident",   "x")
         self.assertLexes("x\r\n",
-                         "ident",   "x",
-                         "newline", None)
+                         "ident",   "x")
         self.assertLexes("x\r",
-                         "ident",   "x",
-                         "newline", None)
+                         "ident",   "x")
         self.assertLexes("x\\\n",
                          "ident",   "x")
 
         self.assertLexes("x\n\n",
-                         "ident",   "x",
-                         "newline", None)
+                         "ident",   "x")
 
     def test_comment(self):
-        self.assertLexes("# foo")
+        self.assertLexes("# foo", expect_trailing_nl=False)
         self.assertEqual(source.Range(self.buffer, 0, 5),
                          self.lexer.comments[0].loc)
         self.assertEqual("# foo",
@@ -80,7 +81,9 @@ class LexerTestCase(unittest.TestCase):
                          "newline", None,
                          "indent",  None,
                          "pass",    None,
-                         "dedent",  None)
+                         "newline", None,
+                         "dedent",  None,
+                         expect_trailing_nl=False)
 
         self.assertLexes("class x:\n    # foo\n  pass",
                          "class",   None,
@@ -89,7 +92,9 @@ class LexerTestCase(unittest.TestCase):
                          "newline", None,
                          "indent",  None,
                          "pass",    None,
-                         "dedent",  None)
+                         "newline", None,
+                         "dedent",  None,
+                         expect_trailing_nl=False)
 
     def test_float(self):
         self.assertLexes("0.0",
@@ -317,8 +322,7 @@ class LexerTestCase(unittest.TestCase):
                          "newline", None,
                          "dedent",  None,
                          "dedent",  None,
-                         "ident",   "x",
-                         "newline", None)
+                         "ident",   "x")
 
         self.assertDiagnoses(
                          "  x\n    x\n x\n",
@@ -327,8 +331,7 @@ class LexerTestCase(unittest.TestCase):
                          "ident",   "x",
                          "newline", None,
                          "indent",  None,
-                         "ident",   "x",
-                         "newline", None)
+                         "ident",   "x")
 
         self.assertLexesVersions(
                          "    \tx\n\tx\n        x\n", [(2,7)],
@@ -339,24 +342,25 @@ class LexerTestCase(unittest.TestCase):
                          "newline", None,
                          "ident",   "x",
                          "newline", None,
-                         "dedent",  None)
+                         "dedent",  None,
+                         expect_trailing_nl=False)
 
         self.assertDiagnosesVersions(
                          "    \tx\n\tx", [(3,0)],
                          [("error", "inconsistent use of tabs and spaces in indentation", (8, 8))],
                          "indent",  None,
-                         "ident",   "x",
-                         "newline", None)
+                         "ident",   "x")
 
     def test_eof(self):
         self.assertLexes("\t",
                          "indent",  None,
-                         "dedent",  None)
+                         "newline", None,
+                         "dedent",  None,
+                         expect_trailing_nl=False)
 
     def test_interactive(self):
         self.assertLexes("x\n\n",
                          "ident",   "x",
-                         "newline", None,
                          "newline", None,
                          interactive=True)
 

@@ -136,7 +136,7 @@ class ParserTestCase(unittest.TestCase):
             if not only_if(version):
                 continue
 
-            ast = self.parser_for(code + "\n", version).file_input()
+            ast = self.parser_for(code, version).file_input()
             flat_ast = self.flatten_ast(ast)
             self.assertEqual({"ty": "Module", "body": expected_flat_ast},
                              flat_ast)
@@ -146,7 +146,7 @@ class ParserTestCase(unittest.TestCase):
                 (sys.version_info[0:2] == (2, 7) or
                  sys.version_info[0:2] == (3, 4))
             if compatible_pyast_version and version == sys.version_info[0:2] and validate_if():
-                python_ast = pyast.parse(code.replace("·", "\n") + "\n")
+                python_ast = pyast.parse(code.replace("·", "\n"))
                 flat_python_ast = self.flatten_python_ast(python_ast)
                 self.assertEqual({"ty": "Module", "body": expected_flat_ast},
                                  flat_python_ast)

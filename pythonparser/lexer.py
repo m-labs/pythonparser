@@ -242,6 +242,11 @@ class Lexer:
         if self.offset == len(self.source_buffer.source):
             range = source.Range(self.source_buffer, self.offset, self.offset)
 
+            if not self.new_line:
+                self.new_line = True
+                self.queue.append(Token(range, "newline"))
+                return
+
             for i in self.indent[1:]:
                 self.indent.pop(-1)
                 self.queue.append(Token(range, "dedent"))

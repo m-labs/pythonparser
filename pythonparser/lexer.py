@@ -11,6 +11,7 @@ import sys
 if sys.version_info[0] == 3:
     unichr = chr
     byte = lambda x: bytes([x])
+    long = int
 else:
     byte = chr
 
@@ -335,33 +336,24 @@ class Lexer:
             self.queue.append(Token(tok_range, "complex", int(match.group(7)) * 1j))
 
         elif match.group(8) is not None: # integer literal, dec
-            literal = match.group(8)
-            self._check_long_literal(tok_range, match.group(1))
-            self.queue.append(Token(tok_range, "int", int(literal)))
+            self.queue.append(self._make_int_token(tok_range, match.group(1), 10))
 
         elif match.group(9) is not None: # integer literal, oct
-            literal = match.group(9)
-            self._check_long_literal(tok_range, match.group(1))
-            self.queue.append(Token(tok_range, "int", int(literal, 8)))
+            self.queue.append(self._make_int_token(tok_range, match.group(1), 8))
 
         elif match.group(10) is not None: # integer literal, hex
-            literal = match.group(10)
-            self._check_long_literal(tok_range, match.group(1))
-            self.queue.append(Token(tok_range, "int", int(literal, 16)))
+            self.queue.append(self._make_int_token(tok_range, match.group(1), 16))
 
         elif match.group(11) is not None: # integer literal, bin
-            literal = match.group(11)
-            self._check_long_literal(tok_range, match.group(1))
-            self.queue.append(Token(tok_range, "int", int(literal, 2)))
+            self.queue.append(self._make_int_token(tok_range, match.group(1), 2))
 
         elif match.group(12) is not None: # integer literal, bare oct
-            literal = match.group(12)
-            if len(literal) > 1 and self.version >= (3, 0):
+            if len(match.group(12)) > 1 and self.version >= (3, 0):
                 error = diagnostic.Diagnostic(
                     "error", "in Python 3, decimal literals must not start with a zero", {},
                     source.Range(self.source_buffer, tok_range.begin_pos, tok_range.begin_pos + 1))
                 self.diagnostic_engine.process(error)
-            self.queue.append(Token(tok_range, "int", int(literal, 8)))
+            self.queue.append(self._make_int_token(tok_range, match.group(1), 8))
 
         elif match.group(14) is not None: # long string literal
             self._string_literal(
@@ -546,12 +538,15 @@ class Lexer:
 
         return b"".join(chunks)
 
-    def _check_long_literal(self, range, literal):
-        if literal[-1] in "lL" and self.version >= (3, 0):
+    def _make_int_token(self, tok_range, literal, base):
+        if literal[-1] not in "lL":
+            return Token(tok_range, "int", int(literal, base))
+        if self.version >= (3, 0):
             error = diagnostic.Diagnostic(
                 "error", "in Python 3, long integer literals were removed", {},
-                source.Range(self.source_buffer, range.end_pos - 1, range.end_pos))
+                source.Range(self.source_buffer, tok_range.end_pos - 1, tok_range.end_pos))
             self.diagnostic_engine.process(error)
+        return Token(tok_range, "long", long(literal[:-1], base))
 
     def _match_pair_delim(self, range, kwop):
         if kwop == "(":

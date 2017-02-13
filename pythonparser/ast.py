@@ -95,6 +95,13 @@ class AST(object):
         for field in fields:
             setattr(self, field, fields[field])
 
+    ## Should we be as strict as CPython ast?
+    # def __setattr__(self, name, value):
+    #     if name not in self._fields + self._locs + tuple(self.__dict__.keys()):
+    #         raise AttributeError("'%s' object should have no attribute '%s'" % (type(self), name))
+    #     super(AST, self).__setattr__(name, value)
+
+
 class alias(AST, commonloc):
     """
     An import alias, e.g. ``x as y``.

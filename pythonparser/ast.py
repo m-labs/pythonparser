@@ -60,10 +60,7 @@ class commonloc(object):
     # Compat with stdlib
     @property
     def lineno(self):
-        return self.loc
-    @lineno.setter
-    def lineno(self, value):
-        self.loc = value
+        return self.loc.line()
 
 
 class keywordloc(commonloc):

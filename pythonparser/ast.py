@@ -91,7 +91,10 @@ class AST(object):
     """
     _fields = ()
 
-    def __init__(self, **fields):
+    def __init__(self, *args, **fields):
+        if args:
+            fields.update(dict(zip(self._fields, args)))
+
         for field in fields:
             setattr(self, field, fields[field])
 

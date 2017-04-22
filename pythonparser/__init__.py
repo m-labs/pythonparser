@@ -54,6 +54,9 @@ def parse(source, filename="<unknown>", mode="exec",
     :raise: :class:`diagnostic.Error`
         if the source code is not well-formed
     """
+    if not source.endswith('\n'):
+        source += '\n'
+
     ast, comments = parse_buffer(pythonparser.source.Buffer(source, filename),
                                  mode, flags, version, engine)
     return ast

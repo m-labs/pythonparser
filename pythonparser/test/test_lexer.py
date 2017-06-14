@@ -358,6 +358,10 @@ class LexerTestCase(unittest.TestCase):
                          "dedent",  None,
                          expect_trailing_nl=False)
 
+    def test_stmt_at_eof(self):
+        self.assertLexes("x",
+                         "ident",   "x")
+
     def test_interactive(self):
         self.assertLexes("x\n\n",
                          "ident",   "x",

@@ -1512,7 +1512,7 @@ class Parser:
     def atom_2(self, tok):
         return ast.Name(id=tok.value, loc=tok.loc, ctx=None)
 
-    @action(Alt(Tok("int"), Tok("float"), Tok("complex")))
+    @action(Alt(Tok("int"), Tok("float"), Tok("complex"), Tok("long")))
     def atom_3(self, tok):
         return ast.Num(n=tok.value, loc=tok.loc)
 

@@ -142,10 +142,10 @@ class LexerTestCase(unittest.TestCase):
                          "int", 83)
         self.assertLexesVersions(
                          "123L", [(2,6)],
-                         "int", 123)
+                         "long", 123)
         self.assertLexesVersions(
                          "123l", [(2,6)],
-                         "int", 123)
+                         "long", 123)
 
         self.assertDiagnosesVersions(
                          "0123", [(3,0)],

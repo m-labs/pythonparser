@@ -242,6 +242,13 @@ class ParserTestCase(unittest.TestCase):
             "1j",
             "~~ loc")
 
+    def test_long(self):
+        self.assertParsesExpr(
+            {"ty": "Num", "n": test_utils.LongOnly(1)},
+            "1L",
+            "~~ loc",
+            only_if=lambda ver: ver < (3,))
+
     def test_string(self):
         self.assertParsesExpr(
             {"ty": "Str", "s": "foo"},

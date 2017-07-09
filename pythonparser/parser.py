@@ -1512,12 +1512,8 @@ class Parser:
     def atom_2(self, tok):
         return ast.Name(id=tok.value, loc=tok.loc, ctx=None)
 
-    @action(Alt(Tok("int"), Tok("float"), Tok("complex")))
+    @action(Alt(Tok("int"), Tok("float"), Tok("complex"), Tok("long")))
     def atom_3(self, tok):
-        return ast.Num(n=tok.value, loc=tok.loc)
-
-    @action(Tok("long"))
-    def atom_3_long(self, tok):
         return ast.Num(n=tok.value, loc=tok.loc)
 
     @action(Seq(Tok("strbegin"), Tok("strdata"), Tok("strend")))
@@ -1546,7 +1542,7 @@ class Parser:
                             empty=lambda self: ast.Dict(keys=[], values=[], colon_locs=[],
                                                         loc=None)),
                    BeginEnd("`", atom_1, "`"),
-                   atom_2, atom_3, atom_3_long, atom_5)
+                   atom_2, atom_3, atom_5)
     """
     (2.6)
     atom: ('(' [yield_expr|testlist_gexp] ')' |

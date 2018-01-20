@@ -363,19 +363,19 @@ class Lexer:
                                     int(literal) * 1j))
 
         elif match.group(8) is not None: # integer literal, dec
-            literal = match.group(8).replace("_", "")
+            literal = match.group(1).replace("_", "")
             self.queue.append(self._make_int_token(tok_range, literal, 10))
 
         elif match.group(9) is not None: # integer literal, oct
-            literal = match.group(9).replace("_", "")
+            literal = match.group(1).replace("_", "")
             self.queue.append(self._make_int_token(tok_range, literal, 8))
 
         elif match.group(10) is not None: # integer literal, hex
-            literal = match.group(10).replace("_", "")
+            literal = match.group(1).replace("_", "")
             self.queue.append(self._make_int_token(tok_range, literal, 16))
 
         elif match.group(11) is not None: # integer literal, bin
-            literal = match.group(11).replace("_", "")
+            literal = match.group(1).replace("_", "")
             self.queue.append(self._make_int_token(tok_range, literal, 2))
 
         elif match.group(12) is not None: # integer literal, bare oct

@@ -118,11 +118,27 @@ class LexerTestCase(unittest.TestCase):
         self.assertLexes("0e-0",
                          "float", 0.0)
 
+    def test_float_underscore(self):
+        self.assertLexesVersions("1_2.", [(3, 6)],
+                                 "float", 12.)
+        self.assertLexesVersions("1_2.3_4", [(3, 6)],
+                                 "float", 12.34)
+        self.assertLexesVersions("1_2.e1_0", [(3, 6)],
+                                 "float", 12e10)
+        self.assertLexesVersions(".1_2e1_0", [(3, 6)],
+                                 "float", .12e10)
+        self.assertLexesVersions("1_2.3_4e1_0", [(3, 6)],
+                                 "float", 12.34e10)
+
     def test_complex(self):
         self.assertLexes("1e+1j",
                          "complex", 10j)
         self.assertLexes("10j",
                          "complex", 10j)
+
+    def test_complex_underscore(self):
+        self.assertLexesVersions("1_0j", [(3, 6)],
+                                 "complex", 10j)
 
     def test_integer(self):
         self.assertLexes("0",
@@ -159,6 +175,16 @@ class LexerTestCase(unittest.TestCase):
                          "123l", [(3,0)],
                          [("error", "in Python 3, long integer literals were removed", (3, 4))],
                          "int", 123)
+
+    def test_integer_underscore(self):
+        self.assertLexesVersions("1_2_3", [(3, 6)],
+                                 "int", 123)
+        self.assertLexesVersions("0o_1_2_3", [(3, 6)],
+                                 "int", 0o123)
+        self.assertLexesVersions("0x_1_2_3_a_f", [(3, 6)],
+                                 "int", 0x123af)
+        self.assertLexesVersions("0b_0_1_0_1", [(3, 6)],
+                                 "int", 0b0101)
 
     def test_string_literal(self):
         for version in self.VERSIONS:

@@ -78,6 +78,7 @@ class Lexer:
         (3, 3): _reserved_3_1,
         (3, 4): _reserved_3_1,
         (3, 5): _reserved_3_5,
+        (3, 6): _reserved_3_5,
     }
     """
     A map from a tuple (*major*, *minor*) corresponding to Python version to
@@ -86,6 +87,9 @@ class Lexer:
 
     _string_prefixes_3_1 = frozenset(["", "r", "b", "br"])
     _string_prefixes_3_3 = frozenset(["", "r", "u", "b", "br", "rb"])
+    _string_prefixes_3_6 = _string_prefixes_3_3.union(frozenset([
+        "f", "F", "fr", "Fr", "fR", "FR", "rf", "rF", "Rf", "RF"
+    ]))
 
     # holy mother of god why
     _string_prefixes = {
@@ -97,6 +101,7 @@ class Lexer:
         (3, 3): _string_prefixes_3_3,
         (3, 4): _string_prefixes_3_3,
         (3, 5): _string_prefixes_3_3,
+        (3, 6): _string_prefixes_3_6,
     }
     """
     A map from a tuple (*major*, *minor*) corresponding to Python version to
@@ -123,7 +128,8 @@ class Lexer:
         try:
             reserved = self._reserved[version]
         except KeyError:
-            raise NotImplementedError("pythonparser.lexer.Lexer cannot lex Python %s" % str(version))
+            raise NotImplementedError("pythonparser.lexer.Lexer cannot lex Python %s" %
+                                      str(version))
 
         # Sort for the regexp to obey longest-match rule.
         re_reserved  = sorted(reserved, reverse=True, key=len)
@@ -135,6 +141,14 @@ class Lexer:
             id_xid = ""
         else:
             id_xid = "X"
+
+        # Python 3.6+ permits underscores as number delimiters
+        if self.version >= (3, 6):
+            underscore = "_?"
+            digit = "[0-9] (?: _? [0-9] )*"
+        else:
+            underscore = ""
+            digit = "[0-9]+"
 
         # To speed things up on CPython, we use the re module to generate a DFA
         # from our token set and execute it in C. Every result yielded by
@@ -156,19 +170,21 @@ class Lexer:
             ([\n]|[\r][\n]|[\r]) # 3 newline
         |   (\#.*) # 4 comment
         |   ( # 5 floating point or complex literal
-                (?: [0-9]* \.  [0-9]+
-                |   [0-9]+ \.?
-                ) [eE] [+-]? [0-9]+
-            |   [0-9]* \. [0-9]+
-            |   [0-9]+ \.
+                (?:     \.  {d}
+                |   {d} \.  {d}
+                |   {d} \.?
+                ) [eE] [+-]? {d}
+            |       \. {d}
+            |   {d} \. {d}
+            |   {d} \.
             ) ([jJ])? # ?6 complex suffix
-        |   ([0-9]+) [jJ] # 7 complex literal
+        |   ({d}) [jJ] # 7 complex literal
         |   (?: # integer literal
-                ( [1-9]   [0-9]* )       # 8 dec
-            |     0[oO] ( [0-7]+ )       # 9 oct
-            |     0[xX] ( [0-9A-Fa-f]+ ) # 10 hex
-            |     0[bB] ( [01]+ )        # 11 bin
-            |   ( [0-9]   [0-9]* )       # 12 bare oct
+                ( [1-9]   (?: {u} [0-9]       )* ) # 8 dec
+            |     0[oO] ( (?: {u} [0-7]       )+ ) # 9 oct
+            |     0[xX] ( (?: {u} [0-9A-Fa-f] )+ ) # 10 hex
+            |     0[bB] ( (?: {u} [01]        )+ ) # 11 bin
+            |   ( [0-9]   (?: {u} [0-9]       )* ) # 12 bare oct
             )
             [Ll]?
         |   ([BbUu]?[Rr]?) # ?13 string literal options
@@ -185,8 +201,14 @@ class Lexer:
         |   (\p{{{id_xid}ID_Start}}\p{{{id_xid}ID_Continue}}*) # 23 Unicode identifier
         |   ($) # 24 end-of-file
         )
-        """.format(keywords=re_keywords, operators=re_operators,
-                   id_xid=id_xid), re.VERBOSE|re.UNICODE)
+        """.format(
+            u=underscore,
+            d=digit,
+            keywords=re_keywords,
+            operators=re_operators,
+            id_xid=id_xid
+        ),
+        re.VERBOSE|re.UNICODE)
 
     # These are identical for all lexer instances.
     _lex_escape_pattern = r"""
@@ -327,25 +349,34 @@ class Lexer:
         self.new_line = False
 
         if match.group(5) is not None: # floating point or complex literal
+            literal = match.group(5).replace("_", "")
             if match.group(6) is None:
-                self.queue.append(Token(tok_range, "float", float(match.group(5))))
+                self.queue.append(Token(tok_range, "float",
+                                        float(literal)))
             else:
-                self.queue.append(Token(tok_range, "complex", float(match.group(5)) * 1j))
+                self.queue.append(Token(tok_range, "complex",
+                                        float(literal) * 1j))
 
         elif match.group(7) is not None: # complex literal
-            self.queue.append(Token(tok_range, "complex", int(match.group(7)) * 1j))
+            literal = match.group(7).replace("_", "")
+            self.queue.append(Token(tok_range, "complex",
+                                    int(literal) * 1j))
 
         elif match.group(8) is not None: # integer literal, dec
-            self.queue.append(self._make_int_token(tok_range, match.group(1), 10))
+            literal = match.group(8).replace("_", "")
+            self.queue.append(self._make_int_token(tok_range, literal, 10))
 
         elif match.group(9) is not None: # integer literal, oct
-            self.queue.append(self._make_int_token(tok_range, match.group(1), 8))
+            literal = match.group(9).replace("_", "")
+            self.queue.append(self._make_int_token(tok_range, literal, 8))
 
         elif match.group(10) is not None: # integer literal, hex
-            self.queue.append(self._make_int_token(tok_range, match.group(1), 16))
+            literal = match.group(10).replace("_", "")
+            self.queue.append(self._make_int_token(tok_range, literal, 16))
 
         elif match.group(11) is not None: # integer literal, bin
-            self.queue.append(self._make_int_token(tok_range, match.group(1), 2))
+            literal = match.group(11).replace("_", "")
+            self.queue.append(self._make_int_token(tok_range, literal, 2))
 
         elif match.group(12) is not None: # integer literal, bare oct
             if len(match.group(12)) > 1 and self.version >= (3, 0):
@@ -410,6 +441,10 @@ class Lexer:
                 {"prefix": options, "major": self.version[0], "minor": self.version[1]},
                 begin_range)
             self.diagnostic_engine.process(error)
+        if "f" in options or "F" in options:
+            error = diagnostic.Diagnostic(
+                "error", "pythonparser does not yet support format strings",
+                begin_range)
 
         self.queue.append(Token(begin_range, "strbegin", options))
         self.queue.append(Token(data_range,

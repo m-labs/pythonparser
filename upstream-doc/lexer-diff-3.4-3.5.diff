@@ -1,8 +1,45 @@
---- 3.4	2015-04-03 10:52:21.036685329 +0300
-+++ 3.5	2015-04-03 10:53:18.872849650 +0300
-@@ -293 +293 @@
--+       -       *       **      /       //      %
-++       -       *       **      /       //      %      @
-@@ -301 +301 @@
--+=      -=      *=      /=      //=     %=
-++=      -=      *=      /=      //=     %=      @=
+--- 3.4	2018-01-20 01:49:45.626180702 +0000
++++ 3.5	2018-01-20 01:49:39.146180790 +0000
+@@ -313,7 +313,7 @@
+ * *Nd* - decimal numbers
+ * *Pc* - connector punctuations
+ * *Other_ID_Start* - explicit list of characters in `PropList.txt
+-  <http://www.unicode.org/Public/6.3.0/ucd/PropList.txt>`_ to support backwards
++  <http://www.unicode.org/Public/8.0.0/ucd/PropList.txt>`_ to support backwards
+   compatibility
+ * *Other_ID_Continue* - likewise
+
+@@ -538,8 +538,7 @@
+       Support for name aliases [#]_ has been added.
+
+ (5)
+-   Individual code units which form parts of a surrogate pair can be encoded using
+-   this escape sequence.  Exactly four hex digits are required.
++   Exactly four hex digits are required.
+
+ (6)
+    Any Unicode character can be encoded this way.  Exactly eight hex digits
+@@ -690,9 +689,12 @@
+
+ .. index:: single: operators
+
+ The following tokens are operators::
+
+-   +       -       *       **      /       //      %
++   +       -       *       **      /       //      %      @
+    <<      >>      &       |       ^       ~
+    <       >       <=      >=      ==      !=
+
+@@ -704,11 +706,13 @@
+
+ .. index:: single: delimiters
+
+ The following tokens serve as delimiters in the grammar::
+
+    (       )       [       ]       {       }
+    ,       :       .       ;       @       =       ->
+-   +=      -=      *=      /=      //=     %=
++   +=      -=      *=      /=      //=     %=      @=
+    &=      |=      ^=      >>=     <<=     **=
+
+ The period can also occur in floating-point and imaginary literals.  A sequence

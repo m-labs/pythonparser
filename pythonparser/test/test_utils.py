@@ -27,7 +27,7 @@ class UnicodeOnly(unicode):
 try:
     class LongOnly(long):  # Python 2
         def __eq__(self, o):
-            return isinstance(o, long) and long.__cmp__(self, o) == 0
+            return isinstance(o, long) and long.__cmp__(self, o) == 0  # noqa
 
         def __ne__(self, o):
             return not self == o

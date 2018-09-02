@@ -256,7 +256,7 @@ class RewriterConflict(Exception):
 
     def __init__(self, first, second):
         self.first, self.second = first, second
-        exception.__init__(self, "Ranges %s and %s overlap" % (repr(first), repr(second)))
+        Exception.__init__(self, "Ranges %s and %s overlap" % (repr(first), repr(second)))
 
 class Rewriter:
     """

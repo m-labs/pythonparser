@@ -1,7 +1,7 @@
 # coding:utf-8
 
 from __future__ import absolute_import, division, print_function, unicode_literals
-import sys
+
 
 unicode = type("")
 
@@ -24,12 +24,12 @@ class UnicodeOnly(unicode):
     def __ne__(self, o):
         return not self == o
 
-if sys.version_info >= (3,):
-    LongOnly = int
-else:
-    class LongOnly(long):
+try:
+    class LongOnly(long):  # Python 2
         def __eq__(self, o):
-            return isinstance(o, long) and long.__cmp__(self, o) == 0
+            return isinstance(o, long) and long.__cmp__(self, o) == 0  # noqa
 
-    def __ne__(self, o):
-        return not self == o
+        def __ne__(self, o):
+            return not self == o
+except NameError:          # Python 3
+    LongOnly = int

@@ -13,7 +13,7 @@ class PushDocCommand(Command):
 
 setup(
     name="pythonparser",
-    version="1.1",
+    version="1.2",
     author="whitequark",
     author_email="whitequark@whitequark.org",
     url="https://m-labs.hk/pythonparser",

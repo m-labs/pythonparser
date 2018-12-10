@@ -349,7 +349,7 @@ def BeginEnd(begin_tok, inner_rule, end_tok, empty=None, loc=None):
         return node
     return rule
 
-class Parser:
+class Parser(object):
 
     # Generic LL parsing methods
     def __init__(self, lexer, version, diagnostic_engine):

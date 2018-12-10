@@ -905,12 +905,17 @@ class Parser(object):
         return ast.Print(dest=dest, values=values, nl=nl,
                          dest_loc=dest_loc, loc=loc)
 
+    @action(Seq(Loc(">>"), Rule("test")))
+    def print_stmt_3(self, dest_loc, dest):
+        return ast.Print(dest=dest, values=[], nl=True,
+                         dest_loc=dest_loc, loc=dest_loc)
+
     @action(Eps())
-    def print_stmt_3(self, eps):
+    def print_stmt_4(self, eps):
         return ast.Print(dest=None, values=[], nl=True,
                          dest_loc=None, loc=None)
 
-    @action(Seq(Loc("print"), Alt(print_stmt_1, print_stmt_2, print_stmt_3)))
+    @action(Seq(Loc("print"), Alt(print_stmt_1, print_stmt_2, print_stmt_3, print_stmt_4)))
     def print_stmt(self, print_loc, stmt):
         """
         (2.6-2.7)

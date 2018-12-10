@@ -1154,6 +1154,14 @@ class ParserTestCase(unittest.TestCase):
             "~~~~~~~~~~~~~ 0.loc",
             only_if=lambda ver: ver < (3, 0))
 
+        self.assertParsesSuite(
+            [{"ty": "Print", "dest": self.ast_2, "values": [], "nl": True}],
+            "print >>2",
+            "~~~~~ 0.keyword_loc"
+            "      ~~ 0.dest_loc"
+            "~~~~~~~~ 0.loc",
+            only_if=lambda ver: ver < (3, 0))
+
     def test_del(self):
         self.assertParsesSuite(
             [{"ty": "Delete", "targets": [self.ast_x]}],

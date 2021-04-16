@@ -419,7 +419,7 @@ class Parser:
             self.expr_stmt_1     = self.expr_stmt_1__26
             self.yield_expr      = self.yield_expr__26
             return
-        elif version in ((3, 0), (3, 1), (3, 2), (3, 3), (3, 4), (3, 5), (3, 6)):
+        elif version in ((3, 0), (3, 1), (3, 2), (3, 3), (3, 4), (3, 5), (3, 6), (3, 7), (3, 8)):
             if version == (3, 0):
                 self.with_stmt       = self.with_stmt__26 # lol
             else:

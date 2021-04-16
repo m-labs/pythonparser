@@ -79,6 +79,8 @@ class Lexer:
         (3, 4): _reserved_3_1,
         (3, 5): _reserved_3_5,
         (3, 6): _reserved_3_5,
+        (3, 7): _reserved_3_5,
+        (3, 8): _reserved_3_5,
     }
     """
     A map from a tuple (*major*, *minor*) corresponding to Python version to
@@ -102,6 +104,8 @@ class Lexer:
         (3, 4): _string_prefixes_3_3,
         (3, 5): _string_prefixes_3_3,
         (3, 6): _string_prefixes_3_6,
+        (3, 7): _string_prefixes_3_6,
+        (3, 8): _string_prefixes_3_6,
     }
     """
     A map from a tuple (*major*, *minor*) corresponding to Python version to

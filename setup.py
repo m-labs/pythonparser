@@ -3,7 +3,7 @@ import os
 
 setup(
     name="pythonparser",
-    version="1.3",
+    version="1.4",
     author="whitequark",
     author_email="whitequark@whitequark.org",
     url="https://github.com/m-labs/pythonparser",

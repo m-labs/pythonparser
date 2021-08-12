@@ -1,16 +1,6 @@
 from setuptools import setup, find_packages, Command
 import os
 
-class PushDocCommand(Command):
-    description = "uploads the documentation to m-labs.hk"
-    user_options = []
-    def initialize_options(self):
-        pass
-    def finalize_options(self):
-        pass
-    def run(self):
-        os.system("rsync -avz doc/_build/html/ shell.serverraum.org:~/web/m-labs.hk/pythonparser")
-
 setup(
     name="pythonparser",
     version="1.3",
@@ -29,5 +19,4 @@ setup(
     package_data={},
     ext_modules=[],
     entry_points={},
-    cmdclass={"push_doc":PushDocCommand}
 )

@@ -12,7 +12,7 @@ def parse_buffer(buffer, mode="exec", flags=[], version=None, engine=None):
     """
 
     if version is None:
-        version = sys.version_info[0:2]
+        version = (3, 6)
 
     if engine is None:
         engine = pythonparser.diagnostic.Engine()
@@ -47,7 +47,7 @@ def parse(source, filename="<unknown>", mode="exec",
     :param flags: (list of string) Future flags.
         Equivalent to ``from __future__ import <flags>``.
     :param version: (2-tuple of int) Major and minor version of Python
-        syntax to recognize, ``sys.version_info[0:2]`` by default.
+        syntax to recognize, ``(3, 6)`` by default.
     :param engine: (:class:`diagnostic.Engine`) Diagnostic engine,
         a fresh one is created by default
     :return: (:class:`ast.AST`) Abstract syntax tree

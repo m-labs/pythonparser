@@ -1,1 +1,1 @@
-See http://m-labs.hk/pythonparser/.
+See [./doc/index.rst](./doc/index.rst).
